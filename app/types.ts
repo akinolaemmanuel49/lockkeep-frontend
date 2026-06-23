@@ -1,3 +1,5 @@
+import { inherits } from "util";
+
 export interface User {
     id: string;
     email: string;
@@ -5,6 +7,13 @@ export interface User {
     createdAt: string;
     hasMasterPassword: boolean;
 }
+
+export interface LocalRegisterRequest {
+    email: string;
+    password: string;
+}
+
+export interface LocalLoginRequest extends LocalRegisterRequest { };
 
 export interface KDFParams {
     algorithm: "scrypt";

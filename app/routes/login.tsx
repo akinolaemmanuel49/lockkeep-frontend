@@ -1,7 +1,6 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { useAuth } from "~/providers/auth";
-import { mockSignIn, mockOAuthLogin } from "~/lib/api";
 import Field from "~/components/Field";
 import OAuthButton from "~/components/OAuthButton";
 import { useOAuthLogin } from "~/hooks/useOAuthLogin";
@@ -9,12 +8,13 @@ import { AuthButton } from "~/components/AuthButton";
 import { useToast } from "~/providers/toast";
 import { requireGuest } from "~/lib/auth-guard";
 import type { Route } from "./+types/login";
+import { localLogin } from "~/lib/api";
 
 export const clientLoader = () => {
   return requireGuest();
 };
 
-export function meta({}: Route.MetaArgs) {
+export function meta({ }: Route.MetaArgs) {
   return [
     { title: "Sign In - LockKeep" },
     {
@@ -37,21 +37,14 @@ export default function Login() {
   const {
     handleOAuth,
     isLoading: isOAuthLoading,
-    error: OAuthError,
   } = useOAuthLogin();
-
-  useEffect(() => {
-    if (OAuthError) {
-      addToast(OAuthError, "error");
-    }
-  }, []);
 
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
     try {
-      const result = await mockSignIn(email);
+      const result = await localLogin({ email, password });
       login(result.user);
       navigate(result.user.hasMasterPassword ? "/unlock" : "/setup");
     } catch (err) {

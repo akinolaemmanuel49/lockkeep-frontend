@@ -7,5 +7,6 @@ export default [
     route("setup", "routes/setup.tsx"),
     route("dashboard", "routes/dashboard.tsx"),
     route("settings", "routes/settings.tsx"),
+    route("callback", "routes/callback.tsx"),
     route("*", "routes/not-found.tsx"),
 ] satisfies RouteConfig;

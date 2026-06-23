@@ -1,34 +1,17 @@
 import { useState } from "react";
-import { useNavigate } from "react-router";
-import { useAuth } from "../providers/auth";
-import { mockOAuthLogin } from "~/lib/api";
+import { getAuth0Url, type OAuthProvider } from "~/utils/getAuth0Url";
 
 export function useOAuthLogin() {
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState("");
 
-  const navigate = useNavigate();
-  const { login } = useAuth();
-
-  const handleOAuth = async (provider: "google" | "github") => {
-    setError("");
+  const handleOAuth = (provider: OAuthProvider) => {
     setIsLoading(true);
-
-    try {
-      const result = await mockOAuthLogin(provider);
-
-      login(result.user);
-      navigate("/setup");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "OAuth failed");
-    } finally {
-      setIsLoading(false);
-    }
+    const url = getAuth0Url(provider);
+    window.location.href = url;
   };
 
   return {
     handleOAuth,
     isLoading,
-    error,
   };
 }

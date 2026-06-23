@@ -1,7 +1,6 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { useAuth } from "~/providers/auth";
-import { mockEmailSignup } from "~/lib/api";
 import Field from "~/components/Field";
 import OAuthButton from "~/components/OAuthButton";
 import { useOAuthLogin } from "~/hooks/useOAuthLogin";
@@ -9,12 +8,13 @@ import { AuthButton } from "~/components/AuthButton";
 import { useToast } from "~/providers/toast";
 import { requireGuest } from "~/lib/auth-guard";
 import type { Route } from "./+types/signup";
+import { localRegisterUser } from "~/lib/api";
 
 export const clientLoader = () => {
   return requireGuest();
 };
 
-export function meta({}: Route.MetaArgs) {
+export function meta({ }: Route.MetaArgs) {
   return [
     { title: "Create Account - LockKeep" },
     {
@@ -50,7 +50,7 @@ export default function Signup() {
 
     setIsLoading(true);
     try {
-      const result = await mockEmailSignup(email, password);
+      const result = await localRegisterUser({ email, password });
       login(result.user);
       addToast("Account created successfully", "success");
       navigate("/setup");
@@ -67,14 +67,8 @@ export default function Signup() {
   const {
     handleOAuth,
     isLoading: isOAuthLoading,
-    error: OAuthError,
   } = useOAuthLogin();
 
-  useEffect(() => {
-    if (OAuthError) {
-      addToast(OAuthError, "error");
-    }
-  }, []);
 
   return (
     <div className="flex min-h-[calc(100vh-8rem)] items-center justify-center px-4">
