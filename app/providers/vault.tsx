@@ -17,14 +17,15 @@ import {
   getKDFParams,
 } from "~/lib/crypto";
 import {
-  mockVerifyMasterPassword,
-  mockGetKDFParams,
-  mockCreateCredential,
+  createCredential,
   mockUpdateMasterPassword,
   mockDeleteCredential,
   mockUpdateCredential,
+  fetchKDFParams,
+  verifyVaultPassword,
 } from "~/lib/api";
 import { useAuth } from "./auth";
+import { useNavigate } from "react-router";
 
 const VAULT_EXPIRY_MS = 5 * 60 * 1000;
 const CREDENTIALS_KEY = "vault_credentials_meta";
@@ -48,7 +49,7 @@ interface VaultContextValue {
     password: string;
     notes: string;
   }) => Promise<void>;
-  changeMasterPassword: (
+  changeVaultPassword: (
     oldPassword: string,
     newPassword: string,
   ) => Promise<void>;
@@ -86,7 +87,8 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   );
   const [isLoading, setIsLoading] = useState(false);
   const [isLocked, setIsLocked] = useState(true);
-  const { user } = useAuth();
+  const { user, getAccessToken } = useAuth();
+  const navigate = useNavigate();
 
   const tokenRef = useRef<VaultToken | null>(null);
   const passwordCache = useRef<Map<string, string>>(new Map());
@@ -112,27 +114,31 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     return expired;
   }, [isExpired]);
 
+  const accessToken = getAccessToken();
+
   const unlockVault = useCallback(
     async (password: string) => {
-      if (!user) throw new Error("Not authenticated");
+      if (!accessToken) {
+        throw new Error("Not authenticated")
+      };
 
       setIsLoading(true);
       try {
-        const kdfParams = await mockGetKDFParams(user.id);
+        const kdfParams = await fetchKDFParams(accessToken);
         const salt = hexToBytes(kdfParams.salt);
         const { encryptionKey, verificationHash } = await deriveKeys(
           password,
           salt,
         );
 
-        const result = await mockVerifyMasterPassword(
-          user.id,
+        const result = await verifyVaultPassword(
+          accessToken,
           verificationHash,
         );
 
         if (!result.success) {
           throw new Error("Invalid master password");
-        }
+        };
 
         const cache = new Map<string, string>();
         for (const cred of result.credentials) {
@@ -195,7 +201,9 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       password: string;
       notes: string;
     }) => {
-      if (!user) throw new Error("Not authenticated");
+      if (!accessToken) {
+        throw new Error("Not authenticated")
+      };
       if (checkLocked()) throw new Error("Vault locked");
 
       const token = tokenRef.current!;
@@ -206,7 +214,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
           token.key,
         );
 
-        const newCred = await mockCreateCredential(user.id, {
+        const newCred = await createCredential(accessToken, {
           organization: data.organization,
           siteUrl: data.siteUrl,
           identifier: data.identifier,
@@ -225,17 +233,19 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     [user, checkLocked],
   );
 
-  const changeMasterPassword = useCallback(
+  const changeVaultPassword = useCallback(
     async (oldPassword: string, newPassword: string) => {
-      if (!user) throw new Error("Not authenticated");
+      if (!accessToken) {
+        throw new Error("Not authenticated")
+      };
 
       // Verify old password first
-      const currentKdf = await mockGetKDFParams(user.id);
+      const currentKdf = await fetchKDFParams(accessToken);
       const oldSalt = hexToBytes(currentKdf.salt);
       const { encryptionKey: oldKey, verificationHash: oldHash } =
         await deriveKeys(oldPassword, oldSalt);
 
-      const verifyResult = await mockVerifyMasterPassword(user.id, oldHash);
+      const verifyResult = await verifyVaultPassword(accessToken, oldHash);
       if (!verifyResult.success) {
         throw new Error("Invalid current password");
       }
@@ -273,7 +283,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
 
       // Update server with new verification hash
       await mockUpdateMasterPassword(
-        user.id,
+        user!.id,
         newVerificationHash,
         newKdfParams,
       );
@@ -366,7 +376,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
         lockVault,
         getPassword,
         addCredential,
-        changeMasterPassword,
+        changeVaultPassword,
         updateCredential,
         deleteCredential,
       }}

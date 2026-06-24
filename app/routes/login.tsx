@@ -45,8 +45,8 @@ export default function Login() {
 
     try {
       const result = await localLogin({ email, password });
-      login(result.user);
-      navigate(result.user.hasMasterPassword ? "/unlock" : "/setup");
+      login(result.user, result.access_token);
+      navigate(result.user.hasMasterPassword ? "/dashboard" : "/setup");
     } catch (err) {
       addToast(
         err instanceof Error ? err.message : "Failed to sign in",

@@ -1,8 +1,9 @@
 import { redirect } from "react-router";
+import type { User } from "~/types";
 
 const USER_KEY = "vault_user";
 
-export function getCurrentUser() {
+export function getCurrentUser(): User | null {
     try {
         const stored = sessionStorage.getItem(USER_KEY);
         return stored ? JSON.parse(stored) : null;

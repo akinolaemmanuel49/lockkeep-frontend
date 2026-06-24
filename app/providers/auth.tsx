@@ -10,13 +10,16 @@ import type { User } from "~/types";
 interface AuthContextValue {
   user: User | null;
   isAuthenticated: boolean;
-  login: (user: User) => void;
+  login: (user: User, accessToken: string) => void;
   logout: () => void;
+  getAccessToken: () => string | null;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const USER_KEY = "vault_user";
+export const USER_KEY = "vault_user";
+export const TOKEN_KEY = "vault_access_token";
+export const CREDENTIALS_META = "vault_credentials_meta";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(() => {
@@ -24,20 +27,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return stored ? JSON.parse(stored) : null;
   });
 
-  const login = useCallback((userData: User) => {
+  const login = useCallback((userData: User, accessToken: string) => {
     sessionStorage.setItem(USER_KEY, JSON.stringify(userData));
+    sessionStorage.setItem(TOKEN_KEY, accessToken);
     setUser(userData);
   }, []);
 
   const logout = useCallback(() => {
     sessionStorage.removeItem(USER_KEY);
-    sessionStorage.removeItem("vault_credentials_meta");
+    sessionStorage.removeItem(TOKEN_KEY);
+    sessionStorage.removeItem(CREDENTIALS_META);
     setUser(null);
+  }, []);
+
+  const getAccessToken = useCallback(() => {
+    return sessionStorage.getItem(TOKEN_KEY);
   }, []);
 
   return (
     <AuthContext.Provider
-      value={{ user, isAuthenticated: user !== null, login, logout }}
+      value={{ user, isAuthenticated: user !== null, login, logout, getAccessToken }}
     >
       {children}
     </AuthContext.Provider>

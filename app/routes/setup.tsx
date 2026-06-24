@@ -3,7 +3,7 @@ import { useNavigate } from "react-router";
 import { useAuth } from "~/providers/auth";
 import { useToast } from "~/providers/toast";
 import { deriveKeys, generateSalt, getKDFParams } from "~/lib/crypto";
-import { mockSetupMasterPassword } from "~/lib/api";
+import { setVerificationHash } from "~/lib/api";
 import { requireAuth } from "~/lib/auth-guard";
 import type { Route } from "./+types/setup";
 
@@ -12,7 +12,7 @@ export const clientLoader = () => {
   return null;
 };
 
-export function meta({}: Route.MetaArgs) {
+export function meta({ }: Route.MetaArgs) {
   return [
     { title: "Set Up Vault - LockKeep" },
     {
@@ -29,7 +29,7 @@ export default function Setup() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [strength, setStrength] = useState(0);
-  const { user, login } = useAuth();
+  const { user, login, getAccessToken } = useAuth();
   const { addToast } = useToast();
   const navigate = useNavigate();
 
@@ -72,24 +72,23 @@ export default function Setup() {
       return;
     }
 
+    const accessToken = getAccessToken();
+    if (!accessToken) {
+      addToast("Session expired. Please sign in again.", "error");
+      navigate("/login");
+      return;
+    }
+
     setIsLoading(true);
     try {
       const salt = generateSalt();
-      const { encryptionKey, verificationHash } = await deriveKeys(
-        password,
-        salt,
-      );
+      const { encryptionKey, verificationHash } = await deriveKeys(password, salt);
       const kdfParams = getKDFParams(salt);
 
-      await mockSetupMasterPassword(user.id, verificationHash, kdfParams);
+      const data = await setVerificationHash(accessToken, verificationHash, kdfParams);
 
-      // Update user to reflect master password is set
-      login({ ...user, hasMasterPassword: true });
+      login(data.user, accessToken);
 
-      // Store encryption key in sessionStorage? NO.
-      // Key stays in memory only. For now, we'll store it in a global ref
-      // that we'll set up in the next phase (vault context).
-      // For now, just navigate to dashboard.
       (window as any).__vaultKey = encryptionKey;
 
       addToast("Vault secured successfully", "success");

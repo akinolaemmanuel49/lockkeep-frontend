@@ -1,17 +1,16 @@
-import { inherits } from "util";
-
 export interface User {
     id: string;
     email: string;
     tenantId: string;
     createdAt: string;
+    authMethod: "oauth_google" | "oauth_github" | "local";
     hasMasterPassword: boolean;
-}
+};
 
 export interface LocalRegisterRequest {
     email: string;
     password: string;
-}
+};
 
 export interface LocalLoginRequest extends LocalRegisterRequest { };
 
@@ -21,7 +20,7 @@ export interface KDFParams {
     memory: number;
     iterations: number;
     parallelism: number;
-}
+};
 
 export interface Credential {
     id: string;
@@ -36,11 +35,11 @@ export interface Credential {
     tag: string;
     createdAt: string;
     updatedAt: string;
-}
+};
 
 export interface DecryptedCredential extends Omit<Credential, "encryptedPassword" | "iv" | "tag"> {
     password: string;
-}
+};
 
 export type CredentialFormData = {
     organization: string;
@@ -48,4 +47,4 @@ export type CredentialFormData = {
     identifier: string;
     password: string;
     notes: string;
-}
+};

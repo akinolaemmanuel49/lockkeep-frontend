@@ -14,7 +14,7 @@ const db = {
 
 const generateId = () => crypto.randomUUID();
 
-export async function oauthCallback(accessToken: string): Promise<{ user: User }> {
+export async function oauthCallback(accessToken: string): Promise<{ access_token: string, user: User }> {
     const res = await fetch(`${config.LOCKKEEP_API_URI}/auth/oauth`, {
         method: "POST",
         headers: {
@@ -31,7 +31,7 @@ export async function oauthCallback(accessToken: string): Promise<{ user: User }
     return res.json();
 }
 
-export async function localRegisterUser(newUser: LocalRegisterRequest): Promise<{ user: User }> {
+export async function localRegisterUser(newUser: LocalRegisterRequest): Promise<{ access_token: string, user: User }> {
     const res = await fetch(`${config.LOCKKEEP_API_URI}/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -46,7 +46,7 @@ export async function localRegisterUser(newUser: LocalRegisterRequest): Promise<
     return res.json();
 }
 
-export async function localLogin(authCredentials: LocalLoginRequest): Promise<{ user: User }> {
+export async function localLogin(authCredentials: LocalLoginRequest): Promise<{ access_token: string, user: User }> {
     const res = await fetch(`${config.LOCKKEEP_API_URI}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -64,81 +64,106 @@ export async function localLogin(authCredentials: LocalLoginRequest): Promise<{ 
     return res.json();
 }
 
-// ─── MOCKED API FUNCTIONS ─────────────────────────────────
 
-export async function mockSetupMasterPassword(
-    userId: string,
+export async function setVerificationHash(
+    accessToken: string,
     verificationHash: string,
     kdfParams: KDFParams
-): Promise<void> {
-    await delay(500);
-    const user = db.users.get(userId);
-    if (!user) throw new Error("USER_NOT_FOUND");
+): Promise<{ user: User }> {
+    const res = await fetch(`${config.LOCKKEEP_API_URI}/auth/vault/create`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+            verification_hash: verificationHash,
+            kdf_params: kdfParams,
+        }),
+    });
 
-    user.passwordHash = verificationHash;
-    user.kdfParams = kdfParams;
-    user.hasMasterPassword = true;
+    if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to create master password");
+    }
+
+    return res.json();
 }
 
-export async function mockGetKDFParams(userId: string): Promise<KDFParams> {
-    await delay(200);
-    const user = db.users.get(userId);
-    if (!user) throw new Error("USER_NOT_FOUND");
-    return user.kdfParams;
+export async function fetchKDFParams(accessToken: string): Promise<KDFParams> {
+    const res = await fetch(`${config.LOCKKEEP_API_URI}/auth/vault/kdfparams`, {
+        method: "GET",
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${accessToken}`,
+        },
+    });
+
+    if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to retrieve KDFParams");
+    }
+
+    return res.json();
 }
 
-export async function mockVerifyMasterPassword(
-    userId: string,
+export async function verifyVaultPassword(
+    accessToken: string,
     verificationHash: string,
 ): Promise<{ success: boolean; credentials: Credential[] }> {
-    await delay(600);
-    const user = db.users.get(userId);
-    if (!user) throw new Error("USER_NOT_FOUND");
-    if (!user.hasMasterPassword) throw new Error("MASTER_PASSWORD_NOT_SET");
-    if (user.passwordHash !== verificationHash) throw new Error("INVALID_MASTER_PASSWORD");
+    const res = await fetch(`${config.LOCKKEEP_API_URI}/vault/verify`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+            verification_hash: verificationHash,
+        }),
+    });
 
-    const userCreds: Credential[] = [];
-    for (const [, cred] of db.credentials) {
-        if (cred.userId === user.id && cred.tenantId === user.tenantId) {
-            userCreds.push(cred);
-        }
+    if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to verify vault password");
     }
-    userCreds.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    return { success: true, credentials: userCreds };
+
+    const credentials = await res.json().then((data) => data.credentials)
+
+    return { success: true, credentials };
 }
 
-export async function mockCreateCredential(
-    userId: string,
+export async function createCredential(
+    accessToken: string,
     credential: Omit<Credential, "id" | "userId" | "tenantId" | "createdAt" | "updatedAt">,
 ): Promise<Credential> {
-    await delay(400);
+    const res = await fetch(`${config.LOCKKEEP_API_URI}/vault/credential`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+            organization: credential.organization,
+            siteUrl: credential.siteUrl,
+            identifier: credential.identifier,
+            notes: credential.notes,
+            encryptedPassword: credential.encryptedPassword,
+            iv: credential.iv,
+            tag: credential.tag,
+        }),
+    });
 
-    const user = db.users.get(userId);
-    if (!user) throw new Error("USER_NOT_FOUND");
-
-    for (const [, existing] of db.credentials) {
-        if (
-            existing.userId === user.id &&
-            existing.tenantId === user.tenantId &&
-            existing.organization === credential.organization &&
-            existing.identifier === credential.identifier
-        ) {
-            throw new Error("DUPLICATE_CREDENTIAL: A credential for this organization and identifier already exists.");
-        }
+    if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to add credentials to vault");
     }
 
-    const newCred: Credential = {
-        ...credential,
-        id: generateId(),
-        userId: user.id,
-        tenantId: user.tenantId,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-    };
-
-    db.credentials.set(newCred.id, newCred);
-    return newCred;
+    return res.json();
 }
+
+
+
+// ─── MOCKED API FUNCTIONS ─────────────────────────────────
 
 export async function mockUpdateEmail(
     userId: string,

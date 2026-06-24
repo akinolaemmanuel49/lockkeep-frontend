@@ -28,7 +28,6 @@ export default function UnlockModal({
       setPassword("");
       onUnlock();
     } catch (err) {
-      console.log(err);
       addToast(
         err instanceof Error ? err.message : "Failed to unlock vault",
         "error",

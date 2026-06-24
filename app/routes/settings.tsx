@@ -17,7 +17,7 @@ export const clientLoader = () => {
   return null;
 };
 
-export function meta({}: Route.MetaArgs) {
+export function meta({ }: Route.MetaArgs) {
   return [
     { title: "Settings - LockKeep" },
     {
@@ -30,8 +30,8 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export default function Settings() {
-  const { user, login } = useAuth();
-  const { isLocked, changeMasterPassword } = useVault();
+  const { user, login, getAccessToken } = useAuth();
+  const { isLocked, changeVaultPassword } = useVault();
   const { addToast } = useToast();
 
   const [openSection, setOpenSection] = useState<string | null>("account");
@@ -45,24 +45,28 @@ export default function Settings() {
   const [isChangingAccountPassword, setIsChangingAccountPassword] =
     useState(false);
 
-  const [currentMasterPassword, setCurrentMasterPassword] = useState("");
-  const [newMasterPassword, setNewMasterPassword] = useState("");
-  const [confirmMasterPassword, setConfirmMasterPassword] = useState("");
-  const [isChangingMasterPassword, setIsChangingMasterPassword] =
+  const [currentVaultPassword, setCurrentVaultPassword] = useState("");
+  const [newVaultPassword, setNewVaultPassword] = useState("");
+  const [confirmVaultPassword, setConfirmVaultPassword] = useState("");
+  const [isChangingVaultPassword, setIsChangingVaultPassword] =
     useState(false);
-  const [masterPasswordStrength, setMasterPasswordStrength] = useState(0);
+  const [masterPasswordStrength, setVaultPasswordStrength] = useState(0);
 
-  const isOAuth =
-    user?.email.startsWith("google_") || user?.email.startsWith("github_");
+  const isOAuth = user?.authMethod !== "local";
+
+  const accessToken = getAccessToken();
 
   const handleEmailUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!accessToken) {
+      throw new Error("Not authenticated")
+    };
     if (!user || isOAuth) return;
 
     setIsUpdatingEmail(true);
     try {
       const result = await mockUpdateEmail(user.id, email);
-      login(result.user);
+      login(result.user, accessToken);
       addToast("Email updated successfully", "success");
     } catch (err) {
       addToast(
@@ -110,15 +114,15 @@ export default function Settings() {
     }
   };
 
-  const handleMasterPasswordChange = async (e: React.FormEvent) => {
+  const handleVaultPasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (newMasterPassword.length < 12) {
+    if (newVaultPassword.length < 12) {
       addToast("New master password must be at least 12 characters", "error");
       return;
     }
 
-    if (newMasterPassword !== confirmMasterPassword) {
+    if (newVaultPassword !== confirmVaultPassword) {
       addToast("New master passwords do not match", "error");
       return;
     }
@@ -133,24 +137,24 @@ export default function Settings() {
       return;
     }
 
-    setIsChangingMasterPassword(true);
+    setIsChangingVaultPassword(true);
     try {
-      await changeMasterPassword(currentMasterPassword, newMasterPassword);
+      await changeVaultPassword(currentVaultPassword, newVaultPassword);
       addToast(
-        "Master password changed successfully. All credentials re-encrypted.",
+        "Vault password changed successfully. All credentials re-encrypted.",
         "success",
       );
-      setCurrentMasterPassword("");
-      setNewMasterPassword("");
-      setConfirmMasterPassword("");
-      setMasterPasswordStrength(0);
+      setCurrentVaultPassword("");
+      setNewVaultPassword("");
+      setConfirmVaultPassword("");
+      setVaultPasswordStrength(0);
     } catch (err) {
       addToast(
         err instanceof Error ? err.message : "Failed to change master password",
         "error",
       );
     } finally {
-      setIsChangingMasterPassword(false);
+      setIsChangingVaultPassword(false);
     }
   };
 
@@ -271,17 +275,17 @@ export default function Settings() {
         onToggle={() => toggleSection("vault")}
       >
         <form
-          onSubmit={handleMasterPasswordChange}
+          onSubmit={handleVaultPasswordChange}
           className="flex flex-col gap-4"
         >
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-slate-400">
-              Current Master Password
+              Current Vault Password
             </label>
             <input
               type="password"
-              value={currentMasterPassword}
-              onChange={(e) => setCurrentMasterPassword(e.target.value)}
+              value={currentVaultPassword}
+              onChange={(e) => setCurrentVaultPassword(e.target.value)}
               required
               className="rounded-lg border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm text-slate-200 focus:border-sky-400 focus:outline-none"
             />
@@ -289,14 +293,14 @@ export default function Settings() {
 
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-slate-400">
-              New Master Password
+              New Vault Password
             </label>
             <input
               type="password"
-              value={newMasterPassword}
+              value={newVaultPassword}
               onChange={(e) => {
-                setNewMasterPassword(e.target.value);
-                setMasterPasswordStrength(
+                setNewVaultPassword(e.target.value);
+                setVaultPasswordStrength(
                   calculatePasswordStrength(e.target.value),
                 );
               }}
@@ -304,7 +308,7 @@ export default function Settings() {
               placeholder="Minimum 12 characters"
               className="rounded-lg border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 focus:border-sky-400 focus:outline-none"
             />
-            {newMasterPassword && (
+            {newVaultPassword && (
               <div className="flex items-center gap-3">
                 <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-800">
                   <div
@@ -321,12 +325,12 @@ export default function Settings() {
 
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-slate-400">
-              Confirm New Master Password
+              Confirm New Vault Password
             </label>
             <input
               type="password"
-              value={confirmMasterPassword}
-              onChange={(e) => setConfirmMasterPassword(e.target.value)}
+              value={confirmVaultPassword}
+              onChange={(e) => setConfirmVaultPassword(e.target.value)}
               required
               className="rounded-lg border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm text-slate-200 focus:border-sky-400 focus:outline-none"
             />
@@ -358,12 +362,12 @@ export default function Settings() {
           <div className="flex justify-end">
             <button
               type="submit"
-              disabled={isChangingMasterPassword || isLocked}
+              disabled={isChangingVaultPassword || isLocked}
               className="rounded-lg bg-sky-400 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-sky-300 disabled:opacity-50"
             >
-              {isChangingMasterPassword
+              {isChangingVaultPassword
                 ? "Updating..."
-                : "Change Master Password"}
+                : "Change Vault Password"}
             </button>
           </div>
         </form>

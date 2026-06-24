@@ -15,10 +15,10 @@ export function getAuth0Url(provider: OAuthProvider): string {
     return `https://${config.AUTH0_DOMAIN}/authorize?${params.toString()}`;
 }
 
-export function loginWithGoogle() {
-    window.location.href = getAuth0Url("google");
-}
+// export function loginWithGoogle() {
+//     window.location.href = getAuth0Url("google");
+// }
 
-export function loginWithGitHub() {
-    window.location.href = getAuth0Url("github");
-}
+// export function loginWithGitHub() {
+//     window.location.href = getAuth0Url("github");
+// }
