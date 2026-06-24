@@ -12,7 +12,7 @@ export const clientLoader = () => {
   return requireAuth();
 };
 
-export function meta({}: Route.MetaArgs) {
+export function meta({ }: Route.MetaArgs) {
   return [
     { title: "Dashboard - LockKeep" },
     {
@@ -46,11 +46,11 @@ export default function Dashboard() {
 
   const filtered = searchQuery.trim()
     ? credentials.filter(
-        (c) =>
-          c.organization.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          c.siteUrl.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          c.identifier.toLowerCase().includes(searchQuery.toLowerCase()),
-      )
+      (c) =>
+        c.organization.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        c.siteUrl.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        c.identifier.toLowerCase().includes(searchQuery.toLowerCase()),
+    )
     : credentials;
 
   const requestUnlock = (action: () => void) => {

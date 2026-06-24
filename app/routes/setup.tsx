@@ -3,9 +3,10 @@ import { useNavigate } from "react-router";
 import { useAuth } from "~/providers/auth";
 import { useToast } from "~/providers/toast";
 import { deriveKeys, generateSalt, getKDFParams } from "~/lib/crypto";
-import { setVerificationHash } from "~/lib/api";
+
 import { requireAuth } from "~/lib/auth-guard";
 import type { Route } from "./+types/setup";
+import { setVerificationHash } from "~/lib/api/auth";
 
 export const clientLoader = () => {
   requireAuth();
@@ -85,7 +86,7 @@ export default function Setup() {
       const { encryptionKey, verificationHash } = await deriveKeys(password, salt);
       const kdfParams = getKDFParams(salt);
 
-      const data = await setVerificationHash(accessToken, verificationHash, kdfParams);
+      const data = await setVerificationHash(verificationHash, kdfParams);
 
       login(data.user, accessToken);
 

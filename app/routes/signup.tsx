@@ -8,7 +8,7 @@ import { AuthButton } from "~/components/AuthButton";
 import { useToast } from "~/providers/toast";
 import { requireGuest } from "~/lib/auth-guard";
 import type { Route } from "./+types/signup";
-import { localRegisterUser } from "~/lib/api";
+import { localRegisterUser } from "~/lib/api/auth";
 
 export const clientLoader = () => {
   return requireGuest();

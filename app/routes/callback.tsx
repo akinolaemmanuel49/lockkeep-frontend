@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router";
-import { oauthCallback } from "~/lib/api";
+import { oauthCallback } from "~/lib/api/auth";
 import { useAuth } from "~/providers/auth";
 import { useToast } from "~/providers/toast";
 
@@ -22,7 +22,7 @@ export default function Callback() {
 
         oauthCallback(accessToken)
             .then((data) => {
-                login(data.user, data.access_token);
+                login(data.user, data.access_token, data.refresh_token);
                 addToast("Signed in successfully", "success");
                 navigate(data.user.hasMasterPassword ? "/unlock" : "/setup");
             })

@@ -6,11 +6,12 @@ import {
   type ReactNode,
 } from "react";
 import type { User } from "~/types";
+import { ACCESS_TOKEN_KEY, clearSession, getSessionItem, setAccessToken, setRefreshToken } from "~/utils/sessionStorage";
 
 interface AuthContextValue {
   user: User | null;
   isAuthenticated: boolean;
-  login: (user: User, accessToken: string) => void;
+  login: (user: User, accessToken: string, refreshToken?: string) => void;
   logout: () => void;
   getAccessToken: () => string | null;
 }
@@ -18,7 +19,6 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export const USER_KEY = "vault_user";
-export const TOKEN_KEY = "vault_access_token";
 export const CREDENTIALS_META = "vault_credentials_meta";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -27,21 +27,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return stored ? JSON.parse(stored) : null;
   });
 
-  const login = useCallback((userData: User, accessToken: string) => {
+  const login = useCallback((userData: User, accessToken: string, refreshToken?: string) => {
     sessionStorage.setItem(USER_KEY, JSON.stringify(userData));
-    sessionStorage.setItem(TOKEN_KEY, accessToken);
+    setAccessToken(accessToken);
+    if (refreshToken) {
+      setRefreshToken(refreshToken);
+    }
     setUser(userData);
   }, []);
 
   const logout = useCallback(() => {
-    sessionStorage.removeItem(USER_KEY);
-    sessionStorage.removeItem(TOKEN_KEY);
-    sessionStorage.removeItem(CREDENTIALS_META);
+    clearSession();
     setUser(null);
   }, []);
 
   const getAccessToken = useCallback(() => {
-    return sessionStorage.getItem(TOKEN_KEY);
+    return getSessionItem(ACCESS_TOKEN_KEY);
   }, []);
 
   return (

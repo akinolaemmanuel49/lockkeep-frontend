@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useAuth } from "~/providers/auth";
 import { useVault } from "~/providers/vault";
 import { useToast } from "~/providers/toast";
-import { mockUpdateEmail, mockUpdateAccountPassword } from "~/lib/api";
+
 import {
   calculatePasswordStrength,
   strengthColors,
@@ -11,6 +11,7 @@ import {
 import AccordionSection from "~/components/Accordion";
 import { requireAuth } from "~/lib/auth-guard";
 import type { Route } from "./+types/settings";
+import { mockUpdateAccountPassword, mockUpdateEmail } from "~/lib/api/auth";
 
 export const clientLoader = () => {
   requireAuth();
@@ -23,7 +24,7 @@ export function meta({ }: Route.MetaArgs) {
     {
       name: "description",
       content:
-        "Manage your LockKeep account settings, change your master password, and update security preferences.",
+        "Manage your LockKeep account settings, change your vault password, and update security preferences.",
     },
     { name: "robots", content: "noindex, nofollow" },
   ];
@@ -118,24 +119,24 @@ export default function Settings() {
     e.preventDefault();
 
     if (newVaultPassword.length < 12) {
-      addToast("New master password must be at least 12 characters", "error");
+      addToast("New vault password must be at least 12 characters", "error");
       return;
     }
 
     if (newVaultPassword !== confirmVaultPassword) {
-      addToast("New master passwords do not match", "error");
+      addToast("New vault passwords do not match", "error");
       return;
     }
 
     if (masterPasswordStrength < 3) {
-      addToast("Please use a stronger master password", "error");
+      addToast("Please use a stronger vault password", "error");
       return;
     }
 
-    if (isLocked) {
-      addToast("Vault must be unlocked to change master password", "error");
-      return;
-    }
+    // if (isLocked) {
+    //   addToast("Vault must be unlocked to change vault password", "error");
+    //   return;
+    // }
 
     setIsChangingVaultPassword(true);
     try {
@@ -150,7 +151,7 @@ export default function Settings() {
       setVaultPasswordStrength(0);
     } catch (err) {
       addToast(
-        err instanceof Error ? err.message : "Failed to change master password",
+        err instanceof Error ? err.message : "Failed to change vault password",
         "error",
       );
     } finally {
@@ -177,7 +178,7 @@ export default function Settings() {
           <div className="rounded-lg border border-sky-500/20 bg-sky-500/5 p-4">
             <p className="text-sm text-sky-300">
               Your account is managed by{" "}
-              {user?.email.startsWith("google_") ? "Google" : "GitHub"} OAuth.
+              {user?.authMethod === "oauth_google" ? "Google" : "GitHub"} OAuth.
               Email and account password cannot be changed here.
             </p>
           </div>
@@ -353,7 +354,7 @@ export default function Settings() {
               <line x1="12" y1="17" x2="12.01" y2="17" />
             </svg>
             <span>
-              Changing your master password will re-encrypt all credentials with
+              Changing your vault password will re-encrypt all credentials with
               a new key. This operation may take a moment depending on how many
               credentials you have.
             </span>
@@ -362,7 +363,7 @@ export default function Settings() {
           <div className="flex justify-end">
             <button
               type="submit"
-              disabled={isChangingVaultPassword || isLocked}
+              disabled={isChangingVaultPassword}
               className="rounded-lg bg-sky-400 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-sky-300 disabled:opacity-50"
             >
               {isChangingVaultPassword

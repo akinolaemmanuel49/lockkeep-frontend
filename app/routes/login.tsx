@@ -8,7 +8,8 @@ import { AuthButton } from "~/components/AuthButton";
 import { useToast } from "~/providers/toast";
 import { requireGuest } from "~/lib/auth-guard";
 import type { Route } from "./+types/login";
-import { localLogin } from "~/lib/api";
+import { localLogin } from "~/lib/api/auth";
+
 
 export const clientLoader = () => {
   return requireGuest();
@@ -45,7 +46,7 @@ export default function Login() {
 
     try {
       const result = await localLogin({ email, password });
-      login(result.user, result.access_token);
+      login(result.user, result.access_token, result.refresh_token);
       navigate(result.user.hasMasterPassword ? "/dashboard" : "/setup");
     } catch (err) {
       addToast(
