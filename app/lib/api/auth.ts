@@ -7,6 +7,7 @@ import { authFetch } from "./core";
 export async function oauthCallback(accessToken: string): Promise<{ access_token: string; refresh_token: string; user: User }> {
     const res = await fetch(`${config.LOCKKEEP_API_URI}/auth/oauth`, {
         method: "POST",
+        credentials: "include",
         headers: {
             "Content-Type": "application/json",
             "Authorization": `Bearer ${accessToken}`,
@@ -24,6 +25,7 @@ export async function oauthCallback(accessToken: string): Promise<{ access_token
 export async function localRegisterUser(newUser: LocalRegisterRequest): Promise<{ access_token: string; refresh_token: string; user: User }> {
     const res = await fetch(`${config.LOCKKEEP_API_URI}/auth/register`, {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: newUser.email, password: newUser.password }),
     });
@@ -39,6 +41,7 @@ export async function localRegisterUser(newUser: LocalRegisterRequest): Promise<
 export async function localLogin(authCredentials: LocalLoginRequest): Promise<{ access_token: string; refresh_token: string; user: User }> {
     const res = await fetch(`${config.LOCKKEEP_API_URI}/auth/login`, {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
             email: authCredentials.email,
@@ -74,7 +77,7 @@ export async function setVerificationHash(
 
     if (!res.ok) {
         const err = await res.json();
-        throw new Error(err.error || "Failed to create master password");
+        throw new Error(err.error || "Failed to set vault password");
     }
 
     return res.json();
@@ -94,66 +97,52 @@ export async function fetchKDFParams(): Promise<KDFParams> {
     if (!res.ok) {
         const err = await res.json();
         throw new Error(err.error || "Failed to retrieve KDFParams");
-    }
+    };
 
     return res.json();
 }
 
-// ─── MOCKED API FUNCTIONS (only remaining ones not yet backend-ified) ─────────────────────────────────
+export async function updateEmail(newEmail: string): Promise<{ access_token: string; refresh_token: string; user: User }> {
+    const res = await authFetch(
+        `${config.LOCKKEEP_API_URI}/auth/update/email`,
+        {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                email: newEmail,
+            })
+        },
+    );
 
-const db = {
-    users: new Map<string, any>(),
-    sessions: new Map<string, { userId: string; tenantId: string }>(),
-    credentials: new Map<string, Credential>(),
-};
+    if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to change email address");
+    };
 
-function delay(ms: number): Promise<void> {
-    return new Promise((r) => setTimeout(r, ms));
+    return res.json();
 }
 
-export async function mockUpdateEmail(
-    userId: string,
-    newEmail: string,
-): Promise<{ user: User }> {
-    await delay(400);
-    const user = db.users.get(userId);
-    if (!user) throw new Error("USER_NOT_FOUND");
+export async function updateAccountPassword(currentPassword: string, newPassword: string): Promise<void> {
+    const res = await authFetch(
+        `${config.LOCKKEEP_API_URI}/auth/update/password`,
+        {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                currentPassword,
+                newPassword,
+            }),
+        },
+    );
 
-    for (const [, existing] of db.users) {
-        if (existing.email === newEmail && existing.id !== userId) {
-            throw new Error("EMAIL_EXISTS: An account with this email already exists.");
-        }
+    if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to change password")
     }
 
-    user.email = newEmail;
-    return { user: stripInternal(user) };
-}
-
-export async function mockUpdateAccountPassword(
-    userId: string,
-    currentPassword: string,
-    newPassword: string,
-): Promise<void> {
-    await delay(400);
-    const user = db.users.get(userId);
-    if (!user) throw new Error("USER_NOT_FOUND");
-
-    if (currentPassword === newPassword) {
-        throw new Error("NEW_PASSWORD_SAME: New password must be different from current password.");
-    }
-
-    if (newPassword.length < 8) {
-        throw new Error("PASSWORD_TOO_SHORT: Password must be at least 8 characters.");
-    }
-}
-
-function stripInternal(user: any): User {
-    const { passwordHash: _, kdfParams: __, ...publicUser } = user;
-    return publicUser;
-}
-
-export function clearMockData(): void {
-    db.users.clear();
-    db.sessions.clear();
-    db.credentials.clear();
+    return res.json();
 }

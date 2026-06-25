@@ -11,7 +11,8 @@ import {
 import AccordionSection from "~/components/Accordion";
 import { requireAuth } from "~/lib/auth-guard";
 import type { Route } from "./+types/settings";
-import { mockUpdateAccountPassword, mockUpdateEmail } from "~/lib/api/auth";
+import { updateAccountPassword, updateEmail } from "~/lib/api/auth";
+import { useNavigate } from "react-router";
 
 export const clientLoader = () => {
   requireAuth();
@@ -31,7 +32,7 @@ export function meta({ }: Route.MetaArgs) {
 }
 
 export default function Settings() {
-  const { user, login, getAccessToken } = useAuth();
+  const { user, getAccessToken, logout } = useAuth();
   const { isLocked, changeVaultPassword } = useVault();
   const { addToast } = useToast();
 
@@ -53,6 +54,8 @@ export default function Settings() {
     useState(false);
   const [masterPasswordStrength, setVaultPasswordStrength] = useState(0);
 
+  const navigate = useNavigate();
+
   const isOAuth = user?.authMethod !== "local";
 
   const accessToken = getAccessToken();
@@ -66,8 +69,9 @@ export default function Settings() {
 
     setIsUpdatingEmail(true);
     try {
-      const result = await mockUpdateEmail(user.id, email);
-      login(result.user, accessToken);
+      await updateEmail(email);
+      logout()
+      navigate("/login");
       addToast("Email updated successfully", "success");
     } catch (err) {
       addToast(
@@ -94,8 +98,7 @@ export default function Settings() {
 
     setIsChangingAccountPassword(true);
     try {
-      await mockUpdateAccountPassword(
-        user!.id,
+      await updateAccountPassword(
         currentAccountPassword,
         newAccountPassword,
       );

@@ -6,12 +6,12 @@ import {
   type ReactNode,
 } from "react";
 import type { User } from "~/types";
-import { ACCESS_TOKEN_KEY, clearSession, getSessionItem, setAccessToken, setRefreshToken } from "~/utils/sessionStorage";
+import { ACCESS_TOKEN_KEY, clearSession, getSessionItem, setAccessToken } from "~/utils/sessionStorage";
 
 interface AuthContextValue {
   user: User | null;
   isAuthenticated: boolean;
-  login: (user: User, accessToken: string, refreshToken?: string) => void;
+  login: (user: User, accessToken: string) => void;
   logout: () => void;
   getAccessToken: () => string | null;
 }
@@ -19,7 +19,6 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export const USER_KEY = "vault_user";
-export const CREDENTIALS_META = "vault_credentials_meta";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(() => {
@@ -27,12 +26,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return stored ? JSON.parse(stored) : null;
   });
 
-  const login = useCallback((userData: User, accessToken: string, refreshToken?: string) => {
+  const login = useCallback((userData: User, accessToken: string) => {
     sessionStorage.setItem(USER_KEY, JSON.stringify(userData));
     setAccessToken(accessToken);
-    if (refreshToken) {
-      setRefreshToken(refreshToken);
-    }
     setUser(userData);
   }, []);
 

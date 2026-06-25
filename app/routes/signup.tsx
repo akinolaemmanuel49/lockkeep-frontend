@@ -51,7 +51,7 @@ export default function Signup() {
     setIsLoading(true);
     try {
       const result = await localRegisterUser({ email, password });
-      login(result.user, result.access_token);
+      login(result.user, result.access_token, result.refresh_token);
       addToast("Account created successfully", "success");
       navigate("/setup");
     } catch (err) {

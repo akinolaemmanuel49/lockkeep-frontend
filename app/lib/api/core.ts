@@ -8,7 +8,7 @@ export async function refreshToken(): Promise<boolean> {
             {
                 method: "POST",
                 credentials: "include",
-            },
+            }
         );
 
         if (!res.ok) {
@@ -33,6 +33,7 @@ export async function authFetch(
 
     let response = await fetch(url, {
         ...options,
+        credentials: "include",
         headers: {
             ...options.headers,
             Authorization: `Bearer ${token}`,
@@ -49,7 +50,7 @@ export async function authFetch(
         clearSession();
         window.location.href = "/login";
 
-        throw new Error("SESSION_EXPIRED");
+        throw new Error("Session expired");
     }
 
     token = getAccessToken();

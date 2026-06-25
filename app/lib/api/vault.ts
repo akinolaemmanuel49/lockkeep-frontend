@@ -1,5 +1,5 @@
 import { config } from "~/config";
-import type { KDFParams, User, Credential, LocalLoginRequest, LocalRegisterRequest } from "~/types";
+import type { KDFParams, Credential } from "~/types";
 import { authFetch } from "./core";
 
 export async function verifyVaultPassword(

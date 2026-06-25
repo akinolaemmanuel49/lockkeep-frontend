@@ -22,7 +22,7 @@ export default function Callback() {
 
         oauthCallback(accessToken)
             .then((data) => {
-                login(data.user, data.access_token, data.refresh_token);
+                login(data.user, data.access_token);
                 addToast("Signed in successfully", "success");
                 navigate(data.user.hasMasterPassword ? "/unlock" : "/setup");
             })

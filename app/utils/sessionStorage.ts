@@ -1,5 +1,4 @@
 export const ACCESS_TOKEN_KEY = "access_token";
-export const REFRESH_TOKEN_KEY = "refresh_token";
 export const USER_KEY = "vault_user";
 
 export function getSessionItem(key: string): string | null {
@@ -26,12 +25,3 @@ export const setAccessToken = (token: string) =>
 
 export const removeAccessToken = () =>
     removeSessionItem(ACCESS_TOKEN_KEY);
-
-export const getRefreshToken = () =>
-    getSessionItem(REFRESH_TOKEN_KEY);
-
-export const setRefreshToken = (token: string) =>
-    setSessionItem(REFRESH_TOKEN_KEY, token);
-
-export const removeRefreshToken = () =>
-    removeSessionItem(REFRESH_TOKEN_KEY);
