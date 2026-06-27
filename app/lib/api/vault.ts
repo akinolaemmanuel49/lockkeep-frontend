@@ -1,22 +1,15 @@
 import { config } from "~/config";
-import type { KDFParams, Credential } from "~/types";
+import type { KDFParams, VaultItem, CreateVaultItemRequest, UpdateVaultItemRequest } from "~/types/index";
 import { authFetch } from "./core";
 
 export async function verifyVaultPassword(
     verificationHash: string,
-): Promise<{ success: boolean; credentials: Credential[] }> {
-    const res = await authFetch(
-        `${config.LOCKKEEP_API_URI}/vault/verify`,
-        {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                verification_hash: verificationHash,
-            }),
-        },
-    );
+): Promise<{ success: boolean; credentials: VaultItem[] }> {
+    const res = await authFetch(`${config.LOCKKEEP_API_URI}/vault/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ verification_hash: verificationHash }),
+    });
 
     if (!res.ok) {
         const err = await res.json();
@@ -26,88 +19,62 @@ export async function verifyVaultPassword(
     return res.json();
 }
 
-export async function createCredential(
-    credential: Omit<
-        Credential,
-        "id" | "userId" | "tenantId" | "createdAt" | "updatedAt"
-    >,
-): Promise<Credential> {
-    const res = await authFetch(
-        `${config.LOCKKEEP_API_URI}/vault/credential`,
-        {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify(credential),
-        },
-    );
+export async function createVaultItem(
+    item: CreateVaultItemRequest,
+): Promise<VaultItem> {
+    const res = await authFetch(`${config.LOCKKEEP_API_URI}/vault/item`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(item),
+    });
 
     if (!res.ok) {
         const err = await res.json();
-        throw new Error(err.error || "Failed to add credentials to vault");
+        throw new Error(err.error || "Failed to add item to vault");
     }
 
     return res.json();
 }
 
-export async function fetchCredentials(): Promise<Credential[]> {
-    const res = await authFetch(
-        `${config.LOCKKEEP_API_URI}/vault/credentials`,
-        {
-            method: "GET",
-        },
-    );
+export async function fetchVaultItems(): Promise<VaultItem[]> {
+    const res = await authFetch(`${config.LOCKKEEP_API_URI}/vault/items`, {
+        method: "GET",
+    });
 
     if (!res.ok) {
         const err = await res.json();
-        throw new Error(err.error || "Failed to fetch credentials");
+        throw new Error(err.error || "Failed to fetch vault items");
     }
 
     return res.json();
 }
 
-export async function updateVaultCredential(
-    credentialId: string,
-    updates: Partial<
-        Omit<
-            Credential,
-            "id" | "userId" | "tenantId" | "createdAt" | "updatedAt"
-        >
-    >,
-): Promise<Credential> {
-    const res = await authFetch(
-        `${config.LOCKKEEP_API_URI}/vault/credential/${credentialId}`,
-        {
-            method: "PUT",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify(updates),
-        },
-    );
+export async function updateVaultItem(
+    itemId: string,
+    updates: UpdateVaultItemRequest,
+): Promise<VaultItem> {
+    const res = await authFetch(`${config.LOCKKEEP_API_URI}/vault/item/${itemId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updates),
+    });
 
     if (!res.ok) {
         const err = await res.json();
-        throw new Error(err.error || "Failed to update credential");
+        throw new Error(err.error || "Failed to update vault item");
     }
 
     return res.json();
 }
 
-export async function deleteVaultCredential(
-    credentialId: string,
-): Promise<void> {
-    const res = await authFetch(
-        `${config.LOCKKEEP_API_URI}/vault/credential/${credentialId}`,
-        {
-            method: "DELETE",
-        },
-    );
+export async function deleteVaultItem(itemId: string): Promise<void> {
+    const res = await authFetch(`${config.LOCKKEEP_API_URI}/vault/item/${itemId}`, {
+        method: "DELETE",
+    });
 
     if (!res.ok) {
         const err = await res.json();
-        throw new Error(err.error || "Failed to delete credential");
+        throw new Error(err.error || "Failed to delete vault item");
     }
 }
 
@@ -115,22 +82,17 @@ export async function updateVaultPassword(
     newVerificationHash: string,
     newKdfParams: KDFParams,
 ): Promise<void> {
-    const res = await authFetch(
-        `${config.LOCKKEEP_API_URI}/auth/vault/update`,
-        {
-            method: "PUT",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                verification_hash: newVerificationHash,
-                kdf_params: newKdfParams,
-            }),
-        },
-    );
+    const res = await authFetch(`${config.LOCKKEEP_API_URI}/auth/vault/update`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            verification_hash: newVerificationHash,
+            kdf_params: newKdfParams,
+        }),
+    });
 
     if (!res.ok) {
         const err = await res.json();
-        throw new Error(err.error || "Failed to update master password");
+        throw new Error(err.error || "Failed to update vault password");
     }
 }

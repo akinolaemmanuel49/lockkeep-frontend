@@ -1,67 +1,110 @@
+import { argon2idAsync } from "@noble/hashes/argon2.js";
 import { scryptAsync } from "@noble/hashes/scrypt.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, hexToBytes, randomBytes } from "@noble/hashes/utils.js";
+import type { VaultMetadata } from "../types/index";
 
-// Scrypt parameters: N=2^17 (131072), r=8, p=1
-// ~500ms on modern hardware, memory-hard
-const SCRYPT_N = 17;
-const SCRYPT_R = 8;
-const SCRYPT_P = 1;
-const DK_LEN = 64; // 512 bits = 2 x 256-bit keys
+// ─── Types ─────────────────────────────────────────────────────────────────
+
+export type KDFAlgorithm = "argon2id" | "scrypt";
+
+export interface KDFParams {
+    algorithm: KDFAlgorithm;
+    salt: string;        // hex
+    memory: number;      // KB
+    iterations: number;
+    parallelism: number;
+}
+
+export interface EncryptionResult {
+    ciphertext: string;
+    iv: string;
+    tag: string;
+    version?: number; // The version number comes from the server-stored VaultItem.secret.version
+    // for decryption, or from CURRENT_VERSION when creating new items.
+}
+
+// ─── KDF Resolution ────────────────────────────────────────────────────────
 
 /**
- * Derive encryption key and verification hash from master password.
- * Returns encryption key (non-extractable CryptoKey) and verification hash (hex).
+ * Derive encryption key and verification hash from vault password.
+ * Uses the KDF params stored server-side (algorithm, memory, iterations, etc).
  */
 export async function deriveKeys(
-    masterPassword: string,
-    salt: Uint8Array,
-): Promise<{ encryptionKey: CryptoKey; verificationHash: string }> {
-    const passwordBytes = new TextEncoder().encode(masterPassword);
+    password: string,
+    params: KDFParams,
+): Promise<{
+    encryptionKey: CryptoKey;
+    verificationHash: string;
+}> {
+    const passwordBytes = new TextEncoder().encode(password);
 
-    const derived = await scryptAsync(passwordBytes, salt, {
-        N: 2 ** SCRYPT_N,
-        r: SCRYPT_R,
-        p: SCRYPT_P,
-        dkLen: DK_LEN,
-    });
+    console.log({ SALT: params.salt })
+    const salt = hexToBytes(params.salt);
 
-    const encKeyBytes = derived.slice(0, 32);
-    const verifyKeyBytes = derived.slice(32, 64);
+
+    let derived: Uint8Array;
+
+    switch (params.algorithm) {
+        case "argon2id":
+            derived = await argon2idAsync(passwordBytes, salt, {
+                t: params.iterations,
+                m: params.memory,
+                p: params.parallelism,
+                dkLen: 64,
+            });
+            break;
+
+        case "scrypt":
+            derived = await scryptAsync(passwordBytes, salt, {
+                N: params.memory * 1024,
+                r: 8,
+                p: params.parallelism,
+                dkLen: 64,
+            });
+            break;
+
+        default:
+            throw new Error("Unsupported algorithm");
+    }
+
+    const enc = derived.slice(0, 32);
+    const verify = derived.slice(32);
 
     const encryptionKey = await crypto.subtle.importKey(
         "raw",
-        encKeyBytes,
+        enc,
         { name: "AES-GCM", length: 256 },
-        false, // non-extractable
+        false,
         ["encrypt", "decrypt"],
     );
 
-    const verificationHash = bytesToHex(sha256(verifyKeyBytes));
+    const verificationHash = bytesToHex(sha256(verify));
 
-    // Clear sensitive material
-    encKeyBytes.fill(0);
-    verifyKeyBytes.fill(0);
     derived.fill(0);
+    enc.fill(0);
+    verify.fill(0);
 
-    return { encryptionKey, verificationHash };
+    return {
+        encryptionKey,
+        verificationHash,
+    };
 }
 
-export function generateSalt(): Uint8Array {
-    return randomBytes(32);
-}
+// ─── AES-GCM Encryption ────────────────────────────────────────────────────
 
-export async function encryptPassword(
-    password: string,
+export async function encryptSecret(
+    plaintext: string,
     key: CryptoKey,
-): Promise<{ encrypted: string; iv: string; tag: string }> {
+    version?: number,
+): Promise<EncryptionResult> {
     const iv = crypto.getRandomValues(new Uint8Array(12));
-    const plaintext = new TextEncoder().encode(password);
+    const data = new TextEncoder().encode(plaintext);
 
     const ciphertext = await crypto.subtle.encrypt(
         { name: "AES-GCM", iv },
         key,
-        plaintext,
+        data,
     );
 
     const full = new Uint8Array(ciphertext);
@@ -69,21 +112,19 @@ export async function encryptPassword(
     const tag = full.slice(full.length - 16);
 
     return {
-        encrypted: bytesToHex(encrypted),
+        ciphertext: bytesToHex(encrypted),
         iv: bytesToHex(iv),
         tag: bytesToHex(tag),
     };
 }
 
-export async function decryptPassword(
-    encrypted: string,
-    iv: string,
-    tag: string,
+export async function decryptSecret(
+    result: EncryptionResult,
     key: CryptoKey,
 ): Promise<string> {
-    const encryptedBytes = hexToBytes(encrypted);
-    const ivBytes = hexToBytes(iv);
-    const tagBytes = hexToBytes(tag);
+    const encryptedBytes = hexToBytes(result.ciphertext);
+    const ivBytes = hexToBytes(result.iv);
+    const tagBytes = hexToBytes(result.tag);
 
     const full = new Uint8Array(encryptedBytes.length + tagBytes.length);
     full.set(encryptedBytes, 0);
@@ -98,12 +139,25 @@ export async function decryptPassword(
     return new TextDecoder().decode(decrypted);
 }
 
-export function getKDFParams(salt: Uint8Array) {
+// ─── Helpers ──────────────────────────────────────────────────────────────
+
+export function generateSalt(): Uint8Array {
+    return randomBytes(32);
+}
+
+/**
+ * Builds the KDF parameters for a vault using the
+ * server-provided vault metadata and a newly generated salt.
+ */
+export function buildKDFParams(
+    kdfParams: KDFParams,
+    salt: Uint8Array,
+): KDFParams {
     return {
-        algorithm: "scrypt" as const,
+        algorithm: kdfParams.algorithm,
+        memory: kdfParams.memory,
+        iterations: kdfParams.iterations,
+        parallelism: kdfParams.parallelism,
         salt: bytesToHex(salt),
-        memory: (2 ** SCRYPT_N) / 1024, // 128MB in KB
-        iterations: SCRYPT_N, // log2(N)
-        parallelism: SCRYPT_P,
     };
 }

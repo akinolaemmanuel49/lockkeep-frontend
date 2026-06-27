@@ -2,11 +2,11 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { useAuth } from "~/providers/auth";
 import { useToast } from "~/providers/toast";
-import { deriveKeys, generateSalt, getKDFParams } from "~/lib/crypto";
+import { buildKDFParams, deriveKeys, generateSalt } from "~/lib/crypto";
 
 import { requireAuth } from "~/lib/auth-guard";
 import type { Route } from "./+types/setup";
-import { setVerificationHash } from "~/lib/api/auth";
+import { fetchKDFParams, setVerificationHash } from "~/lib/api/auth";
 
 export const clientLoader = () => {
   requireAuth();
@@ -19,7 +19,7 @@ export function meta({ }: Route.MetaArgs) {
     {
       name: "description",
       content:
-        "Set your master password to secure your LockKeep vault with zero-trust encryption.",
+        "Set your vault password to secure your LockKeep vault with zero-trust encryption.",
     },
     { name: "robots", content: "noindex, nofollow" },
   ];
@@ -54,7 +54,7 @@ export default function Setup() {
     e.preventDefault();
 
     if (password.length < 12) {
-      addToast("Master password must be at least 12 characters", "error");
+      addToast("Vault password must be at least 12 characters", "error");
       return;
     }
 
@@ -82,9 +82,10 @@ export default function Setup() {
 
     setIsLoading(true);
     try {
-      const salt = generateSalt();
-      const { encryptionKey, verificationHash } = await deriveKeys(password, salt);
-      const kdfParams = getKDFParams(salt);
+      const _kdfParams = await fetchKDFParams()
+      const salt = generateSalt()
+      const kdfParams = buildKDFParams(_kdfParams, salt)
+      const { encryptionKey, verificationHash } = await deriveKeys(password, kdfParams);
 
       const data = await setVerificationHash(verificationHash, kdfParams);
 
@@ -95,10 +96,12 @@ export default function Setup() {
       addToast("Vault secured successfully", "success");
       navigate("/dashboard");
     } catch (err) {
-      addToast(
-        err instanceof Error ? err.message : "Failed to set master password",
-        "error",
-      );
+      console.error({ ERRORLOUD: err })
+      addToast("DOOM")
+      // addToast(
+      //   err instanceof Error ? err.message : "Failed to set vault password",
+      //   "error",
+      // );
     } finally {
       setIsLoading(false);
     }
@@ -140,7 +143,7 @@ export default function Setup() {
             </svg>
           </div>
           <h1 className="text-2xl font-bold text-slate-100">
-            Set Your Master Password
+            Set Your Vault Password
           </h1>
           <p className="mt-2 text-sm text-slate-500">
             This is the only password you'll need to remember. We cannot reset
@@ -151,7 +154,7 @@ export default function Setup() {
         <form onSubmit={handleSubmit} className="flex flex-col gap-5">
           <div className="flex flex-col gap-2">
             <label className="text-sm font-medium text-slate-400">
-              Master Password
+              Vault Password
             </label>
             <input
               type="password"
@@ -179,13 +182,13 @@ export default function Setup() {
 
           <div className="flex flex-col gap-2">
             <label className="text-sm font-medium text-slate-400">
-              Confirm Master Password
+              Confirm Vault Password
             </label>
             <input
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="Repeat your master password"
+              placeholder="Repeat your vault password"
               required
               className="rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-slate-200 placeholder:text-slate-600 focus:border-sky-400 focus:outline-none"
             />

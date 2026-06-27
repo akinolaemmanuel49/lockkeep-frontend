@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useVault } from "~/providers/vault";
 import { useToast } from "~/providers/toast";
-import CredentialCard from "~/components/CredentialCard";
-import CredentialModal from "~/components/CredentialModal";
+import VaultItemCard from "~/components/VaultItemCard";
+import PasswordItemModal from "~/components/PasswordItemModal";
+import ItemTypeSelector from "~/components/ItemTypeSelector";
 import UnlockModal from "~/components/UnlockModal";
-import type { Credential } from "~/types";
+import type { VaultItem, VaultItemType } from "~/types/index";
 import { requireAuth } from "~/lib/auth-guard";
 import type { Route } from "./+types/dashboard";
 
@@ -17,8 +18,7 @@ export function meta({ }: Route.MetaArgs) {
     { title: "Dashboard - LockKeep" },
     {
       name: "description",
-      content:
-        "Manage your encrypted credentials. Search, add, and organize your passwords securely.",
+      content: "Manage your encrypted vault items. Search, add, and organize your secrets securely.",
     },
     { name: "robots", content: "noindex, nofollow" },
   ];
@@ -27,31 +27,34 @@ export function meta({ }: Route.MetaArgs) {
 export default function Dashboard() {
   const {
     isLocked,
-    credentials,
+    items,
     isLoading,
-    addCredential,
-    updateCredential,
-    deleteCredential,
-    getPassword,
+    addItem,
+    updateItem,
+    deleteItem,
+    getSecret,
   } = useVault();
   const { addToast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isTypeSelectorOpen, setIsTypeSelectorOpen] = useState(false);
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [isUnlockModalOpen, setIsUnlockModalOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
-  const [editingCredential, setEditingCredential] = useState<Credential | null>(
-    null,
-  );
+  const [editingItem, setEditingItem] = useState<VaultItem | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const filtered = searchQuery.trim()
-    ? credentials.filter(
-      (c) =>
-        c.organization.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        c.siteUrl.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        c.identifier.toLowerCase().includes(searchQuery.toLowerCase()),
+    ? items.filter(
+      (item) =>
+        item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        ((item.metadata?.siteUrl as string) || "")
+          .toLowerCase()
+          .includes(searchQuery.toLowerCase()) ||
+        ((item.metadata?.identifier as string) || "")
+          .toLowerCase()
+          .includes(searchQuery.toLowerCase()),
     )
-    : credentials;
+    : items;
 
   const requestUnlock = (action: () => void) => {
     if (!isLocked) {
@@ -71,32 +74,47 @@ export default function Dashboard() {
   };
 
   const handleAddClick = () => {
-    setEditingCredential(null);
-    requestUnlock(() => setIsAddModalOpen(true));
+    setEditingItem(null);
+    requestUnlock(() => setIsTypeSelectorOpen(true));
   };
 
-  const handleEdit = (cred: Credential) => {
-    setEditingCredential(cred);
-    requestUnlock(() => setIsAddModalOpen(true));
+  const handleTypeSelect = (type: VaultItemType) => {
+    setIsTypeSelectorOpen(false);
+    if (type === "login") {
+      setIsPasswordModalOpen(true);
+    }
   };
 
-  const handleSave = async (data: {
-    organization: string;
-    siteUrl: string;
-    identifier: string;
-    password: string;
-    notes: string;
+  const handleEdit = (item: VaultItem) => {
+    setEditingItem(item);
+    requestUnlock(() => setIsPasswordModalOpen(true));
+  };
+
+  const handleSavePassword = async (data: {
+    name: string;
+    metadata: Record<string, unknown>;
+    secret: string;
   }) => {
     try {
-      if (editingCredential) {
-        await updateCredential(editingCredential.id, data);
-        addToast("Credential updated", "success");
+      if (editingItem) {
+        await updateItem(editingItem.id, {
+          type: "login",
+          name: data.name,
+          metadata: data.metadata,
+          secret: data.secret,
+        });
+        addToast("Password updated", "success");
       } else {
-        await addCredential(data);
-        addToast("Credential saved", "success");
+        await addItem({
+          type: "login",
+          name: data.name,
+          metadata: data.metadata,
+          secret: data.secret,
+        });
+        addToast("Password saved", "success");
       }
-      setIsAddModalOpen(false);
-      setEditingCredential(null);
+      setIsPasswordModalOpen(false);
+      setEditingItem(null);
     } catch (err) {
       addToast(err instanceof Error ? err.message : "Failed to save", "error");
     }
@@ -109,46 +127,37 @@ export default function Dashboard() {
   const confirmDelete = async () => {
     if (!deleteConfirmId) return;
     try {
-      await deleteCredential(deleteConfirmId);
-      addToast("Credential deleted", "success");
+      await deleteItem(deleteConfirmId);
+      addToast("Item deleted", "success");
     } catch (err) {
-      addToast(
-        err instanceof Error ? err.message : "Failed to delete",
-        "error",
-      );
+      addToast(err instanceof Error ? err.message : "Failed to delete", "error");
     } finally {
       setDeleteConfirmId(null);
     }
   };
 
-  const handleRevealPassword = (
-    credentialId: string,
-    onReveal: (password: string) => void,
+  const handleRevealSecret = (
+    itemId: string,
+    onReveal: (secret: string) => void,
   ) => {
     requestUnlock(async () => {
       try {
-        const password = await getPassword(credentialId);
-        onReveal(password);
+        const secret = await getSecret(itemId);
+        onReveal(secret);
       } catch (err) {
-        addToast(
-          err instanceof Error ? err.message : "Failed to get password",
-          "error",
-        );
+        addToast(err instanceof Error ? err.message : "Failed to get secret", "error");
       }
     });
   };
 
-  const handleCopyPassword = (credentialId: string) => {
+  const handleCopySecret = (itemId: string) => {
     requestUnlock(async () => {
       try {
-        const password = await getPassword(credentialId);
-        await navigator.clipboard.writeText(password);
+        const secret = await getSecret(itemId);
+        await navigator.clipboard.writeText(secret);
         addToast("Password copied", "success");
       } catch (err) {
-        addToast(
-          err instanceof Error ? err.message : "Failed to copy password",
-          "error",
-        );
+        addToast(err instanceof Error ? err.message : "Failed to copy", "error");
       }
     });
   };
@@ -176,7 +185,7 @@ export default function Dashboard() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by organization, site, or identifier..."
+            placeholder="Search by name, site, or identifier..."
             className="w-full rounded-lg border border-slate-800 bg-slate-900 py-2.5 pl-10 pr-4 text-sm text-slate-200 placeholder:text-slate-600 focus:border-sky-400 focus:outline-none"
           />
           {searchQuery && (
@@ -184,16 +193,7 @@ export default function Dashboard() {
               onClick={() => setSearchQuery("")}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-300"
             >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
               </svg>
@@ -203,7 +203,7 @@ export default function Dashboard() {
 
         <button
           onClick={handleAddClick}
-          className="flex items-center gap-2 rounded-lg bg-sky-400 px-4 py-2.5 text-sm font-semibold text-slate-950 hover:bg-sky-300"
+          className="flex items-center gap-2 rounded-lg bg-sky-400 px-4 py-2.5 text-sm font-semibold text-slate-950 hover:bg-sky-300 cursor-pointer"
         >
           <svg
             width="16"
@@ -218,15 +218,15 @@ export default function Dashboard() {
             <line x1="12" y1="5" x2="12" y2="19" />
             <line x1="5" y1="12" x2="19" y2="12" />
           </svg>
-          Add Credential
+          Add Item
         </button>
       </div>
 
       {/* Content */}
-      {isLoading && credentials.length === 0 ? (
+      {isLoading && items.length === 0 ? (
         <div className="flex items-center justify-center gap-3 py-20 text-slate-500">
           <div className="h-5 w-5 animate-spin rounded-full border-2 border-slate-700 border-t-sky-400" />
-          <span>Loading credentials...</span>
+          <span>Loading vault items...</span>
         </div>
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center py-20 text-center">
@@ -244,24 +244,22 @@ export default function Dashboard() {
             <path d="M7 11V7a5 5 0 0 1 10 0v4" />
           </svg>
           <p className="mt-4 text-lg font-semibold text-slate-600">
-            {searchQuery ? "No matching credentials" : "No credentials yet"}
+            {searchQuery ? "No matching items" : "No items yet"}
           </p>
           <p className="mt-1 text-sm text-slate-700">
             {searchQuery
               ? "Try adjusting your search"
-              : "Click Add Credential to store your first password"}
+              : "Click Add Item to store your first password"}
           </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((cred) => (
-            <CredentialCard
-              key={cred.id}
-              credential={cred}
-              onRevealPassword={(onReveal) =>
-                handleRevealPassword(cred.id, onReveal)
-              }
-              onCopyPassword={() => handleCopyPassword(cred.id)}
+          {filtered.map((item) => (
+            <VaultItemCard
+              key={item.id}
+              item={item}
+              onRevealSecret={(onReveal) => handleRevealSecret(item.id, onReveal)}
+              onCopySecret={() => handleCopySecret(item.id)}
               onEdit={handleEdit}
               onDelete={handleDelete}
             />
@@ -273,12 +271,9 @@ export default function Dashboard() {
       {deleteConfirmId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
           <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-6">
-            <h3 className="mb-2 text-lg font-semibold text-slate-100">
-              Delete Credential?
-            </h3>
+            <h3 className="mb-2 text-lg font-semibold text-slate-100">Delete Item?</h3>
             <p className="mb-6 text-sm text-slate-400">
-              This action cannot be undone. The credential will be permanently
-              removed.
+              This action cannot be undone. The item will be permanently removed.
             </p>
             <div className="flex justify-end gap-3">
               <button
@@ -308,14 +303,20 @@ export default function Dashboard() {
         }}
       />
 
-      <CredentialModal
-        isOpen={isAddModalOpen}
-        credential={editingCredential}
+      <ItemTypeSelector
+        isOpen={isTypeSelectorOpen}
+        onSelect={handleTypeSelect}
+        onClose={() => setIsTypeSelectorOpen(false)}
+      />
+
+      <PasswordItemModal
+        isOpen={isPasswordModalOpen}
+        item={editingItem}
         onClose={() => {
-          setIsAddModalOpen(false);
-          setEditingCredential(null);
+          setIsPasswordModalOpen(false);
+          setEditingItem(null);
         }}
-        onSave={handleSave}
+        onSave={handleSavePassword}
       />
     </div>
   );

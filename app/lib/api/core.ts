@@ -3,22 +3,15 @@ import { config } from "~/config";
 
 export async function refreshToken(): Promise<boolean> {
     try {
-        const res = await fetch(
-            `${config.LOCKKEEP_API_URI}/auth/refresh`,
-            {
-                method: "POST",
-                credentials: "include",
-            }
-        );
+        const res = await fetch(`${config.LOCKKEEP_API_URI}/auth/refresh`, {
+            method: "POST",
+            credentials: "include",
+        });
 
-        if (!res.ok) {
-            return false;
-        }
+        if (!res.ok) return false;
 
         const data = await res.json();
-
         setAccessToken(data.access_token);
-
         return true;
     } catch {
         return false;
@@ -45,16 +38,13 @@ export async function authFetch(
     }
 
     const refreshed = await refreshToken();
-
     if (!refreshed) {
         clearSession();
         window.location.href = "/login";
-
         throw new Error("Session expired");
     }
 
     token = getAccessToken();
-
     response = await fetch(url, {
         ...options,
         headers: {

@@ -1,26 +1,28 @@
 import { useState, useEffect } from "react";
-import type { Credential } from "~/types";
+import type { VaultItem } from "~/types/index";
 
-interface CredentialModalProps {
+interface PasswordItemModalProps {
   isOpen: boolean;
-  credential: Credential | null;
+  item: VaultItem | null;
   onClose: () => void;
   onSave: (data: {
-    organization: string;
-    siteUrl: string;
-    identifier: string;
-    password: string;
-    notes: string;
+    name: string;
+    metadata: {
+      siteUrl?: string;
+      identifier?: string;
+      notes?: string;
+    };
+    secret: string; // plaintext password — provider encrypts it
   }) => void;
 }
 
-export default function CredentialModal({
+export default function PasswordItemModal({
   isOpen,
-  credential,
+  item,
   onClose,
   onSave,
-}: CredentialModalProps) {
-  const [org, setOrg] = useState("");
+}: PasswordItemModalProps) {
+  const [name, setName] = useState("");
   const [siteUrl, setSiteUrl] = useState("");
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -28,24 +30,24 @@ export default function CredentialModal({
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
 
-  const isEditing = credential !== null;
+  const isEditing = item !== null;
 
   useEffect(() => {
-    if (isOpen && credential) {
-      setOrg(credential.organization);
-      setSiteUrl(credential.siteUrl);
-      setIdentifier(credential.identifier);
+    if (isOpen && item) {
+      setName(item.name);
+      setSiteUrl((item.metadata?.siteUrl as string) || "");
+      setIdentifier((item.metadata?.identifier as string) || "");
       setPassword(""); // Don't show encrypted password
-      setNotes(credential.notes);
+      setNotes((item.metadata?.notes as string) || "");
     } else if (isOpen) {
-      setOrg("");
+      setName("");
       setSiteUrl("");
       setIdentifier("");
       setPassword("");
       setNotes("");
     }
     setError("");
-  }, [isOpen, credential]);
+  }, [isOpen, item]);
 
   const generatePassword = () => {
     const chars =
@@ -53,9 +55,7 @@ export default function CredentialModal({
     const length = 20;
     const array = new Uint8Array(length);
     crypto.getRandomValues(array);
-    const generated = Array.from(array, (b) => chars[b % chars.length]).join(
-      "",
-    );
+    const generated = Array.from(array, (b) => chars[b % chars.length]).join("");
     setPassword(generated);
   };
 
@@ -63,17 +63,19 @@ export default function CredentialModal({
     e.preventDefault();
     setError("");
 
-    if (!org.trim() || !identifier.trim() || !password.trim()) {
-      setError("Organization, identifier, and password are required");
+    if (!name.trim() || !identifier.trim() || !password.trim()) {
+      setError("Name, identifier, and password are required");
       return;
     }
 
     onSave({
-      organization: org.trim(),
-      siteUrl: siteUrl.trim(),
-      identifier: identifier.trim(),
-      password: password,
-      notes: notes.trim(),
+      name: name.trim(),
+      metadata: {
+        siteUrl: siteUrl.trim() || undefined,
+        identifier: identifier.trim(),
+        notes: notes.trim() || undefined,
+      },
+      secret: password, // plaintext — provider encrypts
     });
   };
 
@@ -90,22 +92,13 @@ export default function CredentialModal({
       >
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-slate-100">
-            {isEditing ? "Edit Credential" : "Add New Credential"}
+            {isEditing ? "Edit Password" : "Add Password"}
           </h2>
           <button
             onClick={onClose}
             className="rounded-lg p-1 text-slate-500 hover:text-slate-300"
           >
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
@@ -121,12 +114,12 @@ export default function CredentialModal({
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-slate-400">
-              Organization / Site Name *
+              Name / Organization *
             </label>
             <input
               type="text"
-              value={org}
-              onChange={(e) => setOrg(e.target.value)}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
               placeholder="e.g., GitHub, AWS, Stripe"
               className="rounded-lg border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 focus:border-sky-400 focus:outline-none"
               autoFocus
@@ -134,9 +127,7 @@ export default function CredentialModal({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-slate-400">
-              Site URL
-            </label>
+            <label className="text-sm font-medium text-slate-400">Site URL</label>
             <input
               type="url"
               value={siteUrl}
@@ -160,19 +151,13 @@ export default function CredentialModal({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-slate-400">
-              Password *
-            </label>
+            <label className="text-sm font-medium text-slate-400">Password *</label>
             <div className="flex gap-2">
               <input
                 type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder={
-                  isEditing
-                    ? "Leave blank to keep current"
-                    : "Enter or generate password"
-                }
+                placeholder={isEditing ? "Leave blank to keep current" : "Enter or generate password"}
                 required={!isEditing}
                 className="flex-1 rounded-lg border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 focus:border-sky-400 focus:outline-none"
               />
@@ -180,33 +165,14 @@ export default function CredentialModal({
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
                 className="rounded-lg border border-slate-700 bg-slate-950 px-3 text-slate-400 hover:text-slate-200"
-                title={showPassword ? "Hide" : "Show"}
               >
                 {showPassword ? (
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
                     <line x1="1" y1="1" x2="23" y2="23" />
                   </svg>
                 ) : (
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
                     <circle cx="12" cy="12" r="3" />
                   </svg>

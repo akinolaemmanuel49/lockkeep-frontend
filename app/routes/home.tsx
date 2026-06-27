@@ -65,7 +65,7 @@ export default function Home() {
         />
         <Feature
           icon="lock"
-          text="Master password protected"
+          text="Vault password protected"
           color="text-amber-400"
         />
         <Feature

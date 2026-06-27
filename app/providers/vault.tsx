@@ -7,18 +7,24 @@ import {
   useEffect,
   type ReactNode,
 } from "react";
-import { hexToBytes } from "@noble/hashes/utils.js";
-import type { Credential } from "~/types";
+import type { VaultItem, CreateVaultItemRequest, UpdateVaultItemRequest, KDFParams } from "~/types/index";
 import {
   deriveKeys,
-  decryptPassword,
-  encryptPassword,
+  encryptSecret,
+  decryptSecret,
   generateSalt,
-  getKDFParams,
+  buildKDFParams,
 } from "~/lib/crypto";
 
 import { useAuth } from "./auth";
-import { createCredential, deleteVaultCredential, fetchCredentials, updateVaultCredential, updateVaultPassword, verifyVaultPassword } from "~/lib/api/vault";
+import {
+  createVaultItem,
+  deleteVaultItem,
+  fetchVaultItems,
+  updateVaultItem,
+  updateVaultPassword,
+  verifyVaultPassword,
+} from "~/lib/api/vault";
 import { fetchKDFParams } from "~/lib/api/auth";
 
 const VAULT_EXPIRY_MS = 5 * 60 * 1000;
@@ -30,66 +36,70 @@ interface VaultToken {
 
 interface VaultContextValue {
   isLocked: boolean;
-  credentials: Credential[];
+  items: VaultItem[];
   isLoading: boolean;
   unlockVault: (password: string) => Promise<void>;
   lockVault: () => void;
-  getPassword: (credentialId: string) => Promise<string>;
-  addCredential: (data: {
-    organization: string;
-    siteUrl: string;
-    identifier: string;
-    password: string;
-    notes: string;
+  getSecret: (itemId: string) => Promise<string>;
+  addItem: (data: {
+    type: "login";
+    name: string;
+    metadata: {
+      siteUrl?: string;
+      identifier?: string;
+      notes?: string;
+    };
+    secret: string;
   }) => Promise<void>;
   changeVaultPassword: (
     oldPassword: string,
     newPassword: string,
   ) => Promise<void>;
-  updateCredential: (
+  updateItem: (
     id: string,
     updates: Partial<{
-      organization: string;
-      siteUrl: string;
-      identifier: string;
-      password: string;
-      notes: string;
+      type: "login";
+      name: string;
+      metadata: {
+        siteUrl?: string;
+        identifier?: string;
+        notes?: string;
+      };
+      secret: string;
     }>,
   ) => Promise<void>;
-  deleteCredential: (id: string) => Promise<void>;
+  deleteItem: (id: string) => Promise<void>;
 }
 
 const VaultContext = createContext<VaultContextValue | null>(null);
 
 export function VaultProvider({ children }: { children: ReactNode }) {
-  const [credentials, setCredentials] = useState<Credential[]>([]);
+  const [items, setItems] = useState<VaultItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isLocked, setIsLocked] = useState(true);
   const { getAccessToken, isAuthenticated } = useAuth();
 
   const tokenRef = useRef<VaultToken | null>(null);
-  const passwordCache = useRef<Map<string, string>>(new Map());
+  const secretCache = useRef<Map<string, string>>(new Map());
 
   useEffect(() => {
-    const loadCredentials = async () => {
-      const accessToken = getAccessToken();
-      if (!accessToken) {
-        setCredentials([]);
+    const loadItems = async () => {
+      if (!getAccessToken()) {
+        setItems([]);
         return;
       }
 
       setIsLoading(true);
       try {
-        const creds = await fetchCredentials();
-        setCredentials(creds);
+        setItems(await fetchVaultItems());
       } catch (err) {
-        console.error("Failed to load credentials:", err);
+        console.error("Failed to load vault items:", err);
       } finally {
         setIsLoading(false);
       }
     };
 
-    loadCredentials();
+    loadItems();
   }, [getAccessToken, isAuthenticated]);
 
   const isExpired = useCallback((): boolean => {
@@ -102,7 +112,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     const expired = isExpired();
     if (expired && tokenRef.current) {
       tokenRef.current = null;
-      passwordCache.current.clear();
+      secretCache.current.clear();
       setIsLocked(true);
     }
     return expired;
@@ -116,40 +126,35 @@ export function VaultProvider({ children }: { children: ReactNode }) {
 
   const unlockVault = useCallback(
     async (password: string) => {
-      const accessToken = getAccessTokenOrThrow();
-
+      getAccessTokenOrThrow();
       setIsLoading(true);
+
       try {
         const kdfParams = await fetchKDFParams();
-        const salt = hexToBytes(kdfParams.salt);
         const { encryptionKey, verificationHash } = await deriveKeys(
           password,
-          salt,
+          kdfParams,
         );
 
-        const result = await verifyVaultPassword(
-          verificationHash,
-        );
-
+        const result = await verifyVaultPassword(verificationHash);
         if (!result.success) {
-          throw new Error("Invalid master password");
+          throw new Error("Invalid vault password");
         }
 
-        // Decrypt all credential passwords and populate cache
         const cache = new Map<string, string>();
-        for (const cred of result.credentials) {
-          const decryptedPassword = await decryptPassword(
-            cred.encryptedPassword,
-            cred.iv,
-            cred.tag,
-            encryptionKey,
-          );
-          cache.set(cred.id, decryptedPassword);
+        for (const item of result.credentials) {
+          cache.set(item.id, await decryptSecret({
+            ciphertext: item.secret.ciphertext,
+            iv: item.secret.iv,
+            tag: item.secret.tag,
+            version: item.secret.version!
+          },
+            encryptionKey));
         }
 
         tokenRef.current = { key: encryptionKey, createdAt: Date.now() };
-        passwordCache.current = cache;
-        setCredentials(result.credentials); // Update with latest from backend
+        secretCache.current = cache;
+        setItems(result.credentials);
         setIsLocked(false);
       } finally {
         setIsLoading(false);
@@ -160,65 +165,62 @@ export function VaultProvider({ children }: { children: ReactNode }) {
 
   const lockVault = useCallback(() => {
     tokenRef.current = null;
-    passwordCache.current.clear();
+    secretCache.current.clear();
     setIsLocked(true);
   }, []);
 
-  const getPassword = useCallback(
-    async (credentialId: string): Promise<string> => {
+  const getSecret = useCallback(
+    async (itemId: string): Promise<string> => {
       if (checkLocked()) throw new Error("Vault locked");
 
-      const cached = passwordCache.current.get(credentialId);
+      const cached = secretCache.current.get(itemId);
       if (cached) return cached;
 
-      const cred = credentials.find((c) => c.id === credentialId);
-      if (!cred) throw new Error("Credential not found");
+      const item = items.find((i) => i.id === itemId);
+      if (!item) throw new Error("Vault item not found");
 
-      const token = tokenRef.current!;
-      const decryptedPassword = await decryptPassword(
-        cred.encryptedPassword,
-        cred.iv,
-        cred.tag,
-        token.key,
-      );
-
-      passwordCache.current.set(credentialId, decryptedPassword);
-      return decryptedPassword;
+      const decrypted = await decryptSecret({
+        ciphertext: item.secret.ciphertext,
+        iv: item.secret.iv,
+        tag: item.secret.tag,
+        version: item.secret.version!
+      }, tokenRef.current!.key);
+      secretCache.current.set(itemId, decrypted);
+      return decrypted;
     },
-    [checkLocked, credentials],
+    [checkLocked, items],
   );
 
-  const addCredential = useCallback(
+  const addItem = useCallback(
     async (data: {
-      organization: string;
-      siteUrl: string;
-      identifier: string;
-      password: string;
-      notes: string;
+      type: "login";
+      name: string;
+      metadata: {
+        siteUrl?: string;
+        identifier?: string;
+        notes?: string;
+      };
+      secret: string;
     }) => {
-      const accessToken = getAccessTokenOrThrow();
+      getAccessTokenOrThrow();
       if (checkLocked()) throw new Error("Vault locked");
 
-      const token = tokenRef.current!;
       setIsLoading(true);
       try {
-        const { encrypted, iv, tag } = await encryptPassword(
-          data.password,
-          token.key,
+        const secret = await encryptSecret(
+          data.secret,
+          tokenRef.current!.key,
         );
 
-        const newCred = await createCredential({
-          organization: data.organization,
-          siteUrl: data.siteUrl,
-          identifier: data.identifier,
-          notes: data.notes,
-          encryptedPassword: encrypted,
-          iv,
-          tag,
+        const newItem = await createVaultItem({
+          type: data.type,
+          name: data.name,
+          metadata: data.metadata,
+          secret,
         });
 
-        passwordCache.current.set(newCred.id, data.password);
-        setCredentials((prev) => [newCred, ...prev]);
+        secretCache.current.set(newItem.id, data.secret);
+        setItems((prev) => [newItem, ...prev]);
       } finally {
         setIsLoading(false);
       }
@@ -228,12 +230,11 @@ export function VaultProvider({ children }: { children: ReactNode }) {
 
   const changeVaultPassword = useCallback(
     async (oldPassword: string, newPassword: string) => {
-      const accessToken = getAccessTokenOrThrow();
+      getAccessTokenOrThrow();
 
       const currentKdf = await fetchKDFParams();
-      const oldSalt = hexToBytes(currentKdf.salt);
       const { encryptionKey: oldKey, verificationHash: oldHash } =
-        await deriveKeys(oldPassword, oldSalt);
+        await deriveKeys(oldPassword, currentKdf);
 
       const verifyResult = await verifyVaultPassword(oldHash);
       if (!verifyResult.success) {
@@ -241,107 +242,100 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       }
 
       const newSalt = generateSalt();
+      const newKdfParams = buildKDFParams(currentKdf, newSalt);
       const { encryptionKey: newKey, verificationHash: newVerificationHash } =
-        await deriveKeys(newPassword, newSalt);
-      const newKdfParams = getKDFParams(newSalt);
+        await deriveKeys(newPassword, newKdfParams);
 
-      const updatedCredentials: Credential[] = [];
-      for (const cred of credentials) {
-        let plaintextPassword = passwordCache.current.get(cred.id);
-        if (!plaintextPassword) {
-          plaintextPassword = await decryptPassword(
-            cred.encryptedPassword,
-            cred.iv,
-            cred.tag,
-            oldKey,
-          );
+      const updatedItems: VaultItem[] = [];
+      for (const item of items) {
+        let plaintext = secretCache.current.get(item.id);
+        if (!plaintext) {
+          plaintext = await decryptSecret({
+            ciphertext: item.secret.ciphertext,
+            iv: item.secret.iv,
+            tag: item.secret.tag,
+            version: item.secret.version!
+          }, oldKey);
         }
 
-        const { encrypted, iv, tag } = await encryptPassword(
-          plaintextPassword,
-          newKey,
-        );
+        const newSecret = await encryptSecret(plaintext, newKey);
 
-        const updated = await updateVaultCredential(cred.id, {
-          encryptedPassword: encrypted,
-          iv,
-          tag,
+        const updated = await updateVaultItem(item.id, {
+          type: item.type,
+          name: item.name,
+          metadata: item.metadata || {},
+          secret: newSecret,
         });
 
-        updatedCredentials.push(updated);
-        passwordCache.current.set(cred.id, plaintextPassword);
+        updatedItems.push(updated);
+        secretCache.current.set(item.id, plaintext);
       }
 
       await updateVaultPassword(newVerificationHash, newKdfParams);
 
       tokenRef.current = { key: newKey, createdAt: Date.now() };
-      setCredentials(updatedCredentials);
+      setItems(updatedItems);
     },
-    [getAccessTokenOrThrow, credentials],
+    [getAccessTokenOrThrow, items],
   );
 
-  const updateCredential = useCallback(
+  const updateItem = useCallback(
     async (
       id: string,
       updates: Partial<{
-        organization: string;
-        siteUrl: string;
-        identifier: string;
-        password: string;
-        notes: string;
+        type: "login";
+        name: string;
+        metadata: {
+          siteUrl?: string;
+          identifier?: string;
+          notes?: string;
+        };
+        secret: string;
       }>,
     ) => {
-      const accessToken = getAccessTokenOrThrow();
+      getAccessTokenOrThrow();
       if (checkLocked()) throw new Error("Vault locked");
 
-      const token = tokenRef.current!;
       setIsLoading(true);
       try {
-        const serverUpdates: Partial<
-          Omit<Credential, "id" | "userId" | "tenantId" | "createdAt" | "updatedAt">
-        > = {};
+        const item = items.find((i) => i.id === id);
+        if (!item) throw new Error("Vault item not found");
 
-        if (updates.organization !== undefined)
-          serverUpdates.organization = updates.organization;
-        if (updates.siteUrl !== undefined)
-          serverUpdates.siteUrl = updates.siteUrl;
-        if (updates.identifier !== undefined)
-          serverUpdates.identifier = updates.identifier;
-        if (updates.notes !== undefined) serverUpdates.notes = updates.notes;
+        const serverUpdates: UpdateVaultItemRequest = {
+          type: updates.type || item.type,
+          name: updates.name || item.name,
+          metadata: { ...(item.metadata || {}), ...(updates.metadata || {}) },
+          secret: item.secret,
+        };
 
-        if (updates.password !== undefined) {
-          const { encrypted, iv, tag } = await encryptPassword(
-            updates.password,
-            token.key,
+        if (updates.secret !== undefined) {
+          serverUpdates.secret = await encryptSecret(
+            updates.secret,
+            tokenRef.current!.key,
           );
-          serverUpdates.encryptedPassword = encrypted;
-          serverUpdates.iv = iv;
-          serverUpdates.tag = tag;
         }
 
-        const updated = await updateVaultCredential(id, serverUpdates);
+        const updated = await updateVaultItem(id, serverUpdates);
+        setItems((prev) => prev.map((i) => (i.id === id ? updated : i)));
 
-        setCredentials((prev) => prev.map((c) => (c.id === id ? updated : c)));
-
-        if (updates.password !== undefined) {
-          passwordCache.current.set(id, updates.password);
+        if (updates.secret !== undefined) {
+          secretCache.current.set(id, updates.secret);
         }
       } finally {
         setIsLoading(false);
       }
     },
-    [getAccessTokenOrThrow, checkLocked],
+    [getAccessTokenOrThrow, checkLocked, items],
   );
 
-  const deleteCredential = useCallback(
+  const deleteItem = useCallback(
     async (id: string) => {
-      const accessToken = getAccessTokenOrThrow();
-
+      getAccessTokenOrThrow();
       setIsLoading(true);
       try {
-        await deleteVaultCredential(id);
-        passwordCache.current.delete(id);
-        setCredentials((prev) => prev.filter((c) => c.id !== id));
+        await deleteVaultItem(id);
+        secretCache.current.delete(id);
+        setItems((prev) => prev.filter((i) => i.id !== id));
       } finally {
         setIsLoading(false);
       }
@@ -353,15 +347,15 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     <VaultContext.Provider
       value={{
         isLocked,
-        credentials,
+        items,
         isLoading,
         unlockVault,
         lockVault,
-        getPassword,
-        addCredential,
+        getSecret,
+        addItem,
         changeVaultPassword,
-        updateCredential,
-        deleteCredential,
+        updateItem,
+        deleteItem,
       }}
     >
       {children}

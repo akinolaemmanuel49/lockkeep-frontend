@@ -357,9 +357,9 @@ export default function Settings() {
               <line x1="12" y1="17" x2="12.01" y2="17" />
             </svg>
             <span>
-              Changing your vault password will re-encrypt all credentials with
+              Changing your vault password will re-encrypt vault content with
               a new key. This operation may take a moment depending on how many
-              credentials you have.
+              items you have.
             </span>
           </div>
 

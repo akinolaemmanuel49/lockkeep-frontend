@@ -66,20 +66,20 @@ export default function UnlockModal({
           </div>
           <h1 className="text-2xl font-bold text-slate-100">Vault Locked</h1>
           <p className="mt-2 text-sm text-slate-500">
-            Enter your master password to continue.
+            Enter your vault password to continue.
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-5">
           <div className="flex flex-col gap-2">
             <label className="text-sm font-medium text-slate-400">
-              Master Password
+              Vault Password
             </label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Your master password"
+              placeholder="Your vault password"
               required
               autoFocus
               className="rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-slate-200 placeholder:text-slate-600 focus:border-sky-400 focus:outline-none"
@@ -97,7 +97,7 @@ export default function UnlockModal({
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-lg border border-slate-700 py-3 text-sm font-medium text-slate-400 hover:text-slate-200"
+            className="rounded-lg border border-slate-700 py-3 text-sm font-medium text-slate-400 hover:text-slate-200 cursor-pointer"
           >
             Cancel
           </button>

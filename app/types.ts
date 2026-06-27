@@ -15,7 +15,7 @@ export interface LocalRegisterRequest {
 export interface LocalLoginRequest extends LocalRegisterRequest { };
 
 export interface KDFParams {
-    algorithm: "scrypt";
+    algorithm: "scrypt" | "argon2id";
     salt: string;
     memory: number;
     iterations: number;
