@@ -1,87 +1,83 @@
-# Welcome to React Router!
+## Frontend README
 
-A modern, production-ready template for building full-stack React applications using React Router.
+# LockKeep UI
 
-[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/remix-run/react-router-templates/tree/main/default)
+React frontend for LockKeep — a zero-trust secrets manager where all encryption happens in the browser.
 
-## Features
+## What It Does
 
-- 🚀 Server-side rendering
-- ⚡️ Hot Module Replacement (HMR)
-- 📦 Asset bundling and optimization
-- 🔄 Data loading and mutations
-- 🔒 TypeScript by default
-- 🎉 TailwindCSS for styling
-- 📖 [React Router docs](https://reactrouter.com/)
+- Encrypts secrets client-side before they ever reach the server
+- Manages vault lifecycle: unlock, lock, password change, KDF migration
+- Caches decrypted secrets in-memory with automatic expiry (5-minute vault sessions)
+- Transparently re-encrypts all vault items when crypto policies change
 
-## Getting Started
+## Tech Stack
 
-### Installation
+- **React Router v7** with SSR/SPA hybrid
+- **Vite** for builds
+- **Auth0 SPA SDK** for OAuth2 authentication
 
-Install the dependencies:
+## Project Structure
+
+```
+├── app/                 # React Router routes and pages
+│   ├── components/      # Reusable UI components
+│   ├── hooks/           
+│   ├── providers/       
+│   ├── routes/          
+│   ├── types/           # TypeScript definitions
+│   ├── utils/           
+│   ├── lib/ 
+│   │   └── api/         # HTTP clients     
+│   ├── app.css  
+│   ├── config.ts  
+│   ├── root.ts
+│   └── routes.ts
+└── vite.config.ts
+```
+
+## Configuration
+
+Environment variables:
+
+| Variable | Purpose |
+|----------|---------|
+| `VITE_LOCKKEEP_API_URI` | Backend base URL |
+| `VITE_AUTH0_REDIRECT_URI` | OAuth2 callback URL |
+| `AUTH0_DOMAIN` | Auth0 tenant domain |
+| `AUTH0_CLIENT_ID` | Auth0 SPA client ID |
+
+## Running Locally
 
 ```bash
 npm install
-```
-
-### Development
-
-Start the development server with HMR:
-
-```bash
 npm run dev
 ```
 
-Your application will be available at `http://localhost:5173`.
-
-## Building for Production
-
-Create a production build:
+## Docker
 
 ```bash
-npm run build
+docker build -t lockkeep-ui .
 ```
 
-## Deployment
+The frontend serves on port `3000` and expects the backend at `VITE_LOCKKEEP_API_URI`.
 
-### Docker Deployment
-
-To build and run using Docker:
-
-```bash
-docker build -t my-app .
-
-# Run the container
-docker run -p 3000:3000 my-app
+## Vault Architecture
+(scrypt/Argon2id)
+```
+┌─────────────┐     ┌─────────────────┐     ┌─────────────┐
+│    Vault    │     │     KDF         │     │ Encryption  │
+│  Password   │──── │(scrypt/Argon2id)│──── │    Key      │
+└─────────────┘     └─────────────────┘     └──────┬──────┘
+                                                   │
+                            ┌──────────────────────┼─────────────────────┐
+                            │                      │                     │                                          
+                        ┌─────────┐           ┌─────────┐           ┌─────────┐
+                        │ Secret 1│           │ Secret 2│           │ Secret N│
+                        │(AES-GCM)│           │(AES-GCM)│           │(AES-GCM)│
+                        └─────────┘           └─────────┘           └─────────┘
 ```
 
-The containerized application can be deployed to any platform that supports Docker, including:
-
-- AWS ECS
-- Google Cloud Run
-- Azure Container Apps
-- Digital Ocean App Platform
-- Fly.io
-- Railway
-
-### DIY Deployment
-
-If you're familiar with deploying Node applications, the built-in app server is production-ready.
-
-Make sure to deploy the output of `npm run build`
-
-```
-├── package.json
-├── package-lock.json (or pnpm-lock.yaml, or bun.lockb)
-├── build/
-│   ├── client/    # Static assets
-│   └── server/    # Server-side code
-```
-
-## Styling
-
-This template comes with [Tailwind CSS](https://tailwindcss.com/) already configured for a simple default starting experience. You can use whatever CSS framework you prefer.
-
----
-
-Built with ❤️ using React Router.
+- **Vault unlock**: Derives key from password + stored KDF params, verifies hash, decrypts all secrets into memory cache
+- **KDF migration**: On unlock or password change, detects policy drift, re-derives key with new params, re-encrypts everything server-side
+- **Vault lock**: Wipes key and cache from memory
