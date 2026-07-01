@@ -52,8 +52,9 @@ export async function fetchVaultItems(): Promise<VaultItem[]> {
 export async function updateVaultItem(
     itemId: string,
     updates: UpdateVaultItemRequest,
+    updatePolicy?: boolean,
 ): Promise<VaultItem> {
-    const res = await authFetch(`${config.LOCKKEEP_API_URI}/vault/item/${itemId}`, {
+    const res = await authFetch(`${config.LOCKKEEP_API_URI}/vault/item/${itemId}?updatePolicy=${updatePolicy === true}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates),

@@ -39,7 +39,6 @@ export async function deriveKeys(
 }> {
     const passwordBytes = new TextEncoder().encode(password);
 
-    console.log({ SALT: params.salt })
     const salt = hexToBytes(params.salt);
 
 

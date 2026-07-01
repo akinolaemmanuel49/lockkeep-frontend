@@ -47,6 +47,7 @@ export async function authFetch(
     token = getAccessToken();
     response = await fetch(url, {
         ...options,
+        credentials: "include",
         headers: {
             ...options.headers,
             Authorization: `Bearer ${token}`,

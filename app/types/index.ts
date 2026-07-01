@@ -98,3 +98,15 @@ export interface MigrateVaultRequest {
         secret: Secret;
     }>;
 }
+
+export interface CryptoPolicy {
+    id: string,
+    version: number,
+    kdfParams: {
+        algorithm: "argon2id" | "scrypt";
+        memory: number;
+        iterations: number;
+        parallelism: number;
+    },
+    updatedAt: string,
+}

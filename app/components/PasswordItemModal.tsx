@@ -4,6 +4,7 @@ import type { VaultItem } from "~/types/index";
 interface PasswordItemModalProps {
   isOpen: boolean;
   item: VaultItem | null;
+  decryptedSecret: string | null; // NEW: plaintext secret for editing
   onClose: () => void;
   onSave: (data: {
     name: string;
@@ -12,13 +13,14 @@ interface PasswordItemModalProps {
       identifier?: string;
       notes?: string;
     };
-    secret: string; // plaintext password — provider encrypts it
+    secret: string;
   }) => void;
 }
 
 export default function PasswordItemModal({
   isOpen,
   item,
+  decryptedSecret,
   onClose,
   onSave,
 }: PasswordItemModalProps) {
@@ -37,7 +39,7 @@ export default function PasswordItemModal({
       setName(item.name);
       setSiteUrl((item.metadata?.siteUrl as string) || "");
       setIdentifier((item.metadata?.identifier as string) || "");
-      setPassword(""); // Don't show encrypted password
+      setPassword(decryptedSecret || ""); // NEW: use decrypted secret if available
       setNotes((item.metadata?.notes as string) || "");
     } else if (isOpen) {
       setName("");
@@ -47,7 +49,7 @@ export default function PasswordItemModal({
       setNotes("");
     }
     setError("");
-  }, [isOpen, item]);
+  }, [isOpen, item, decryptedSecret]); // NEW: depend on decryptedSecret
 
   const generatePassword = () => {
     const chars =
@@ -75,7 +77,7 @@ export default function PasswordItemModal({
         identifier: identifier.trim(),
         notes: notes.trim() || undefined,
       },
-      secret: password, // plaintext — provider encrypts
+      secret: password,
     });
   };
 

@@ -41,6 +41,7 @@ export default function Dashboard() {
   const [isUnlockModalOpen, setIsUnlockModalOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
   const [editingItem, setEditingItem] = useState<VaultItem | null>(null);
+  const [editingSecret, setEditingSecret] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const filtered = searchQuery.trim()
@@ -75,6 +76,7 @@ export default function Dashboard() {
 
   const handleAddClick = () => {
     setEditingItem(null);
+    setEditingSecret(null);
     requestUnlock(() => setIsTypeSelectorOpen(true));
   };
 
@@ -87,7 +89,16 @@ export default function Dashboard() {
 
   const handleEdit = (item: VaultItem) => {
     setEditingItem(item);
-    requestUnlock(() => setIsPasswordModalOpen(true));
+    setEditingSecret(null);
+    requestUnlock(async () => {
+      try {
+        const secret = await getSecret(item.id);
+        setEditingSecret(secret);
+        setIsPasswordModalOpen(true);
+      } catch (err) {
+        addToast(err instanceof Error ? err.message : "Failed to decrypt secret", "error");
+      }
+    });
   };
 
   const handleSavePassword = async (data: {
@@ -115,6 +126,7 @@ export default function Dashboard() {
       }
       setIsPasswordModalOpen(false);
       setEditingItem(null);
+      setEditingSecret(null);
     } catch (err) {
       addToast(err instanceof Error ? err.message : "Failed to save", "error");
     }
@@ -312,9 +324,11 @@ export default function Dashboard() {
       <PasswordItemModal
         isOpen={isPasswordModalOpen}
         item={editingItem}
+        decryptedSecret={editingSecret}
         onClose={() => {
           setIsPasswordModalOpen(false);
           setEditingItem(null);
+          setEditingSecret(null);
         }}
         onSave={handleSavePassword}
       />
