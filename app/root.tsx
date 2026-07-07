@@ -108,10 +108,15 @@ function Logo() {
 }
 
 function Nav() {
+  const { user } = useAuth();
+  
   return (
     <nav className="flex gap-1">
       <NavLink to="/dashboard">Dashboard</NavLink>
       <NavLink to="/settings">Settings</NavLink>
+      {user?.userType === "admin" && (
+        <NavLink to="/admin/policy">Policy</NavLink>
+      )}
     </nav>
   );
 }

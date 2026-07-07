@@ -1,5 +1,8 @@
 // ─── Domain Types ─────────────────────────────────────────────
 
+import { setCurrentPolicy } from "~/lib/api/crypto.policy";
+import type { KDFAlgorithm } from "~/lib/crypto";
+
 export type VaultItemType =
     | "login"
     | "environment"
@@ -29,6 +32,7 @@ export interface User {
     hasMasterPassword: boolean;
     authMethod?: string;
     vault?: VaultMetadata;
+    userType: "admin" | "user";   // NEW
 }
 
 export interface Secret {
@@ -109,4 +113,13 @@ export interface CryptoPolicy {
         parallelism: number;
     },
     updatedAt: string,
+}
+
+export interface SetCurrentPolicyRequest {
+    kdfParams: {
+        algorithm: KDFAlgorithm;
+        memory: number;
+        iterations: number;
+        parallelism: number;
+    }
 }
