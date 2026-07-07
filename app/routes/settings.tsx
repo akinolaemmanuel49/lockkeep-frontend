@@ -376,51 +376,6 @@ export default function Settings() {
           </div>
         </form>
       </AccordionSection>
-
-      {/* Security Info Accordion */}
-      <AccordionSection
-        id="info"
-        title="Security Information"
-        isOpen={openSection === "info"}
-        onToggle={() => toggleSection("info")}
-      >
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="flex flex-col gap-1">
-            <span className="text-xs font-medium uppercase tracking-wider text-slate-600">
-              Encryption
-            </span>
-            <span className="font-mono text-sm text-slate-300">
-              AES-256-GCM (client-side)
-            </span>
-          </div>
-          <div className="flex flex-col gap-1">
-            <span className="text-xs font-medium uppercase tracking-wider text-slate-600">
-              Key Derivation
-            </span>
-            <span className="font-mono text-sm text-slate-300">
-              Scrypt (N=2<sup>17</sup>, r=8, p=1)
-            </span>
-          </div>
-          <div className="flex flex-col gap-1">
-            <span className="text-xs font-medium uppercase tracking-wider text-slate-600">
-              Verification
-            </span>
-            <span className="font-mono text-sm text-slate-300">
-              SHA-256 of derived key
-            </span>
-          </div>
-          <div className="flex flex-col gap-1">
-            <span className="text-xs font-medium uppercase tracking-wider text-slate-600">
-              Vault Status
-            </span>
-            <span
-              className={`font-mono text-sm ${isLocked ? "text-red-400" : "text-green-400"}`}
-            >
-              {isLocked ? "Locked" : "Unlocked"}
-            </span>
-          </div>
-        </div>
-      </AccordionSection>
     </div>
   );
 }
